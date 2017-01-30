@@ -33,12 +33,21 @@ module Pervasives =
     let inline (lsl) x n = x <<< n
 
     let inline (.()) xs i = Array.get xs i
+    let inline (.()<-) xs i x = Array.set xs i x
 
     let succ x = OCaml.Pervasives.succ x
 
-    let string_of_int x = OCaml.Pervasives.string_of_int x
+    let print_int x = OCaml.Pervasives.print_int x
+    let print_newline() = OCaml.Pervasives.print_newline()
+
     let int_of_string x = OCaml.Pervasives.int_of_string x
+    let int_of_float x = OCaml.Pervasives.int_of_float x
     let float_of_string x = OCaml.Pervasives.float_of_string x
+    let float_of_int x = OCaml.Pervasives.float_of_int x
+    let string_of_int x = OCaml.Pervasives.string_of_int x
+
+    let abs_float x = OCaml.Pervasives.abs_float x
+    let truncate x = OCaml.Pervasives.int_of_float x
 
 module Format =
     let eprintf format = Printf.eprintf format
@@ -47,15 +56,6 @@ module Format =
 module Arg =
     let parse specs other usageText = OCaml.Arg.parse specs other usageText
     let Int x = OCaml.Arg.Int x
-
-module Lexing =
-    open Microsoft.FSharp.Text.Lexing
-
-    let from_string s = LexBuffer<_>.FromString s
-    let from_channel is = LexBuffer<_>.FromTextReader is
-    let lexeme b = LexBuffer<_>.LexemeString b
-    let lexeme_start (b: _ LexBuffer) = b.StartPos.pos_cnum
-    let lexeme_end (b: _ LexBuffer) = b.EndPos.pos_cnum
 
 module List =
     let fold_left2 f z xs1 xs2 = OCaml.List.fold_left2 f z xs1 xs2
@@ -66,6 +66,7 @@ module List =
 
 module Array =
     let to_list xs = OCaml.Array.to_list xs
+    let make n x = OCaml.Array.make n x
 
 module String =
     let get (x: string) i = x.[i]
@@ -75,7 +76,3 @@ module Hashtbl =
     let add map k v = OCaml.Hashtbl.add map k v
     let find map k = OCaml.Hashtbl.find map k
 
-module Sys =
-    let argv = OCaml.Sys.argv
-
-namespace Microsoft.FSharp.Compatibility.OCaml.Parsing
