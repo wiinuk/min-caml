@@ -1,5 +1,5 @@
-type t = string (* ÊÑ¿ô¤ÎÌ¾Á° (caml2html: id_t) *)
-type l = L of string (* ¥È¥Ã¥×¥ì¥Ù¥ë´Ø¿ô¤ä¥°¥í¡¼¥Ð¥ëÇÛÎó¤Î¥é¥Ù¥ë (caml2html: id_l) *)
+type t = string (* å¤‰æ•°ã®åå‰ (caml2html: id_t) *)
+type l = L of string (* ãƒˆãƒƒãƒ—ãƒ¬ãƒ™ãƒ«é–¢æ•°ã‚„ã‚°ãƒ­ãƒ¼ãƒãƒ«é…åˆ—ã®ãƒ©ãƒ™ãƒ« (caml2html: id_l) *)
 
 let rec pp_list = function
   | [] -> ""
@@ -19,7 +19,12 @@ let rec id_of_typ = function
   | Type.Fun _ -> "f"
   | Type.Tuple _ -> "t"
   | Type.Array _ -> "a" 
+  (*F#
+  | Type.Var _ -> assert_false()
+  F#*)
+  (*IF-OCAML*)
   | Type.Var _ -> assert false
+  (*ENDIF-OCAML*)
 let gentmp typ =
   incr counter;
   Printf.sprintf "T%s%d" (id_of_typ typ) !counter

@@ -1,10 +1,10 @@
 (* SPARC assembly with a few virtual instructions *)
 
 type id_or_imm = V of Id.t | C of int
-type t = (* Ì¿Îá¤ÎÎó (caml2html: sparcasm_t) *)
+type t = (* å‘½ä»¤ã®åˆ— (caml2html: sparcasm_t) *)
   | Ans of exp
   | Let of (Id.t * Type.t) * exp * t
-and exp = (* °ì¤Ä°ì¤Ä¤ÎÌ¿Îá¤ËÂÐ±þ¤¹¤ë¼° (caml2html: sparcasm_exp) *)
+and exp = (* ä¸€ã¤ä¸€ã¤ã®å‘½ä»¤ã«å¯¾å¿œã™ã‚‹å¼ (caml2html: sparcasm_exp) *)
   | Nop
   | Set of int
   | SetL of Id.l
@@ -27,16 +27,16 @@ and exp = (* °ì¤Ä°ì¤Ä¤ÎÌ¿Îá¤ËÂÐ±þ¤¹¤ë¼° (caml2html: sparcasm_exp) *)
   (* virtual instructions *)
   | IfEq of Id.t * id_or_imm * t * t
   | IfLE of Id.t * id_or_imm * t * t
-  | IfGE of Id.t * id_or_imm * t * t (* º¸±¦ÂÐ¾Î¤Ç¤Ï¤Ê¤¤¤Î¤ÇÉ¬Í× *)
+  | IfGE of Id.t * id_or_imm * t * t (* å·¦å³å¯¾ç§°ã§ã¯ãªã„ã®ã§å¿…è¦ *)
   | IfFEq of Id.t * Id.t * t * t
   | IfFLE of Id.t * Id.t * t * t
   (* closure address, integer arguments, and float arguments *)
   | CallCls of Id.t * Id.t list * Id.t list
   | CallDir of Id.l * Id.t list * Id.t list
-  | Save of Id.t * Id.t (* ¥ì¥¸¥¹¥¿ÊÑ¿ô¤ÎÃÍ¤ò¥¹¥¿¥Ã¥¯ÊÑ¿ô¤ØÊÝÂ¸ (caml2html: sparcasm_save) *)
-  | Restore of Id.t (* ¥¹¥¿¥Ã¥¯ÊÑ¿ô¤«¤éÃÍ¤òÉü¸µ (caml2html: sparcasm_restore) *)
+  | Save of Id.t * Id.t (* ãƒ¬ã‚¸ã‚¹ã‚¿å¤‰æ•°ã®å€¤ã‚’ã‚¹ã‚¿ãƒƒã‚¯å¤‰æ•°ã¸ä¿å­˜ (caml2html: sparcasm_save) *)
+  | Restore of Id.t (* ã‚¹ã‚¿ãƒƒã‚¯å¤‰æ•°ã‹ã‚‰å€¤ã‚’å¾©å…ƒ (caml2html: sparcasm_restore) *)
 type fundef = { name : Id.l; args : Id.t list; fargs : Id.t list; body : t; ret : Type.t }
-(* ¥×¥í¥°¥é¥àÁ´ÂÎ = ÉâÆ°¾®¿ôÅÀ¿ô¥Æ¡¼¥Ö¥ë + ¥È¥Ã¥×¥ì¥Ù¥ë´Ø¿ô + ¥á¥¤¥ó¤Î¼° (caml2html: sparcasm_prog) *)
+(* ãƒ—ãƒ­ã‚°ãƒ©ãƒ å…¨ä½“ = æµ®å‹•å°æ•°ç‚¹æ•°ãƒ†ãƒ¼ãƒ–ãƒ« + ãƒˆãƒƒãƒ—ãƒ¬ãƒ™ãƒ«é–¢æ•° + ãƒ¡ã‚¤ãƒ³ã®å¼ (caml2html: sparcasm_prog) *)
 type prog = Prog of (Id.l * float) list * fundef list * t
 
 let fletd(x, e1, e2) = Let((x, Type.Float), e1, e2)
@@ -55,7 +55,12 @@ let reg_fsw = fregs.(Array.length fregs - 1) (* temporary for swap *)
 let reg_sp = "%i0" (* stack pointer *)
 let reg_hp = "%i1" (* heap pointer (caml2html: sparcasm_reghp) *)
 let reg_ra = "%o7" (* return address *)
+(*F#
+let is_reg x = String.get x 0 = '%'
+F#*)
+(*IF-OCAML*)
 let is_reg x = (x.[0] = '%')
+(*ENDIF-OCAML*)
 let co_freg_table =
   let ht = Hashtbl.create 16 in
   for i = 0 to 15 do
@@ -75,6 +80,9 @@ let rec remove_and_uniq xs = function
 
 (* free variables in the order of use (for spilling) (caml2html: sparcasm_fv) *)
 let fv_id_or_imm = function V(x) -> [x] | _ -> []
+(*F#
+module Fv = struct
+F#*)
 let rec fv_exp = function
   | Nop | Set(_) | SetL(_) | Comment(_) | Restore(_) -> []
   | Mov(x) | Neg(x) | FMovD(x) | FNegD(x) | Save(x, _) -> [x]
@@ -89,7 +97,13 @@ and fv = function
   | Ans(exp) -> fv_exp exp
   | Let((x, t), exp, e) ->
       fv_exp exp @ remove_and_uniq (S.singleton x) (fv e)
+(*F#
+end
+let fv e = remove_and_uniq S.empty (Fv.fv e)
+F#*)
+(*IF-OCAML*)
 let fv e = remove_and_uniq S.empty (fv e)
+(*ENDIF-OCAML*)
 
 let rec concat e1 xt e2 =
   match e1 with
