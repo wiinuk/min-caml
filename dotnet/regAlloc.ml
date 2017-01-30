@@ -33,25 +33,37 @@ and target src dest = function (* register targeting (caml2html: regalloc_target
       c2, rs1 @ rs2
 and target_args src all n = function (* auxiliary function for Call *)
   | [] -> []
-  | y :: ys when src = y -> all.(n) :: target_args src all (n + 1) ys
+  | y :: ys when src = y (* && n <= List.length all - 2 *) ->
+      all.(n) :: target_args src all (n + 1) ys
   | _ :: ys -> target_args src all (n + 1) ys
+(* "register sourcing" (?) as opposed to register targeting *)
+(* （x86の2オペランド命令のためのregister coalescing） *)
+let rec source t = function
+  | Ans(exp) -> source' t exp
+  | Let(_, _, e) -> source t e
+and source' t = function
+  | Mov(x) | Neg(x) | Add(x, C _) | Sub(x, _) | FMovD(x) | FNegD(x) | FSubD(x, _) | FDivD(x, _) -> [x]
+  | Add(x, V y) | FAddD(x, y) | FMulD(x, y) -> [x; y]
+  | IfEq(_, _, e1, e2) | IfLE(_, _, e1, e2) | IfGE(_, _, e1, e2) | IfFEq(_, _, e1, e2) | IfFLE(_, _, e1, e2) ->
+      source t e1 @ source t e2
+  | CallCls _ | CallDir _ -> (match t with Type.Unit -> [] | Type.Float -> [fregs.(0)] | _ -> [regs.(0)])
+  | _ -> []
 
 type alloc_result = (* allocにおいてspillingがあったかどうかを表すデータ型 *)
   | Alloc of Id.t (* allocated register *)
   | Spill of Id.t (* spilled variable *)
-let rec alloc dest cont regenv x t =
+let rec alloc cont regenv x t prefer =
   (* allocate a register or spill a variable *)
   assert (not (M.mem x regenv));
   let all =
     match t with
-    | Type.Unit -> ["%g0"] (* dummy *)
+    | Type.Unit -> [] (* dummy *)
     | Type.Float -> allfregs
     | _ -> allregs in
-  if all = ["%g0"] then Alloc("%g0") else (* [XX] ad hoc optimization *)
+  if all = [] then Alloc("%unit") else (* [XX] ad hoc *)
   if is_reg x then Alloc(x) else
   let free = fv cont in
   try
-    let (c, prefer) = target x dest cont in
     let live = (* 生きているレジスタ *)
       List.fold_left
         (fun live y ->
@@ -100,13 +112,16 @@ let rec g dest cont regenv = function (* 命令列のレジスタ割り当て (c
       assert (not (M.mem x regenv));
       let cont' = concat e dest cont in
       let (e1', regenv1) = g'_and_restore xt cont' regenv exp in
-      (match alloc dest cont' regenv1 x t with
+      let (_call, targets) = target x dest cont' in
+      let sources = source t e1' in
+      (* レジスタ間のmovよりメモリを介するswapのほうが問題なので、sourcesよりtargetsを優先 *)
+      (match alloc cont' regenv1 x t (targets @ sources) with
       | Spill(y) ->
 	  let r = M.find y regenv1 in
 	  let (e2', regenv2) = g dest cont (add x r (M.remove y regenv1)) e in
 	  let save =
 	    try Save(M.find y regenv, y)
-	    with Not_found -> Nop in
+	    with Not_found -> Nop in	    
 	  (seq(save, concat e1' (r, t) e2'), regenv2)
       | Alloc(r) ->
 	  let (e2', regenv2) = g dest cont (add x r regenv1) e in
@@ -122,38 +137,32 @@ and g' dest cont regenv = function (* 各命令のレジスタ割り当て (caml
   | Neg(x) -> (Ans(Neg(find x Type.Int regenv)), regenv)
   | Add(x, y') -> (Ans(Add(find x Type.Int regenv, find' y' regenv)), regenv)
   | Sub(x, y') -> (Ans(Sub(find x Type.Int regenv, find' y' regenv)), regenv)
-  | SLL(x, y') -> (Ans(SLL(find x Type.Int regenv, find' y' regenv)), regenv)
-  | Ld(x, y') -> (Ans(Ld(find x Type.Int regenv, find' y' regenv)), regenv)
-  | St(x, y, z') -> (Ans(St(find x Type.Int regenv, find y Type.Int regenv, find' z' regenv)), regenv)
+  | Ld(x, y', i) -> (Ans(Ld(find x Type.Int regenv, find' y' regenv, i)), regenv)
+  | St(x, y, z', i) -> (Ans(St(find x Type.Int regenv, find y Type.Int regenv, find' z' regenv, i)), regenv)
   | FMovD(x) -> (Ans(FMovD(find x Type.Float regenv)), regenv)
   | FNegD(x) -> (Ans(FNegD(find x Type.Float regenv)), regenv)
   | FAddD(x, y) -> (Ans(FAddD(find x Type.Float regenv, find y Type.Float regenv)), regenv)
   | FSubD(x, y) -> (Ans(FSubD(find x Type.Float regenv, find y Type.Float regenv)), regenv)
   | FMulD(x, y) -> (Ans(FMulD(find x Type.Float regenv, find y Type.Float regenv)), regenv)
   | FDivD(x, y) -> (Ans(FDivD(find x Type.Float regenv, find y Type.Float regenv)), regenv)
-  | LdDF(x, y') -> (Ans(LdDF(find x Type.Int regenv, find' y' regenv)), regenv)
-  | StDF(x, y, z') -> (Ans(StDF(find x Type.Float regenv, find y Type.Int regenv, find' z' regenv)), regenv)
+  | LdDF(x, y', i) -> (Ans(LdDF(find x Type.Int regenv, find' y' regenv, i)), regenv)
+  | StDF(x, y, z', i) -> (Ans(StDF(find x Type.Float regenv, find y Type.Int regenv, find' z' regenv, i)), regenv)
   | IfEq(x, y', e1, e2) as exp -> g'_if dest cont regenv exp (fun e1' e2' -> IfEq(find x Type.Int regenv, find' y' regenv, e1', e2')) e1 e2
   | IfLE(x, y', e1, e2) as exp -> g'_if dest cont regenv exp (fun e1' e2' -> IfLE(find x Type.Int regenv, find' y' regenv, e1', e2')) e1 e2
   | IfGE(x, y', e1, e2) as exp -> g'_if dest cont regenv exp (fun e1' e2' -> IfGE(find x Type.Int regenv, find' y' regenv, e1', e2')) e1 e2
   | IfFEq(x, y, e1, e2) as exp -> g'_if dest cont regenv exp (fun e1' e2' -> IfFEq(find x Type.Float regenv, find y Type.Float regenv, e1', e2')) e1 e2
   | IfFLE(x, y, e1, e2) as exp -> g'_if dest cont regenv exp (fun e1' e2' -> IfFLE(find x Type.Float regenv, find y Type.Float regenv, e1', e2')) e1 e2
   | CallCls(x, ys, zs) as exp ->
-      if List.length ys > Array.length regs - 2 || List.length zs > Array.length fregs - 1 then
+      if List.length ys > Array.length regs - 1 || List.length zs > Array.length fregs then
 	failwith (Format.sprintf "cannot allocate registers for arugments to %s" x)
       else
 	g'_call dest cont regenv exp (fun ys zs -> CallCls(find x Type.Int regenv, ys, zs)) ys zs
   | CallDir(Id.L(x), ys, zs) as exp ->
-      if List.length ys > Array.length regs - 1 || List.length zs > Array.length fregs - 1 then
+      if List.length ys > Array.length regs || List.length zs > Array.length fregs then
 	failwith (Format.sprintf "cannot allocate registers for arugments to %s" x)
       else
 	g'_call dest cont regenv exp (fun ys zs -> CallDir(Id.L(x), ys, zs)) ys zs
-  (*F#
   | Save(x, y) -> assert_false()
-  F#*)
-  (*IF-OCAML*)
-  | Save(x, y) -> assert false
-  (*ENDIF-OCAML*)
 and g'_if dest cont regenv exp constr e1 e2 = (* ifのレジスタ割り当て (caml2html: regalloc_if) *)
   let (e1', regenv1) = g dest cont regenv e1 in
   let (e2', regenv2) = g dest cont regenv e2 in

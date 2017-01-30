@@ -54,10 +54,10 @@
     <Content Include="packages.config" />
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="asm.ml" />
-    <Compile Include="emit.ml" />
-    <Compile Include="regAlloc.ml" />
-    <Compile Include="simm.ml" />
     <Compile Include="virtual.ml" />
+    <Compile Include="simm.ml" />
+    <Compile Include="regAlloc.ml" />
+    <Compile Include="emit.ml" />
     <Compile Include="..\main.ml">
       <Link>main.ml</Link>
     </Compile>
