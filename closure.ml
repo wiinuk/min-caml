@@ -22,7 +22,7 @@ type t = (* クロージャ変換後の式 (caml2html: closure_t) *)
   | LetTuple of (Id.t * Type.t) list * Id.t * t
   | Get of Id.t * Id.t
   | Put of Id.t * Id.t * Id.t
-  | ExtArray of Id.l
+  | ExtArray of Id.l * (* element type *) Type.t
 type fundef = { name : Id.l * Type.t;
 		args : (Id.t * Type.t) list;
 		formal_fv : (Id.t * Type.t) list;
@@ -97,7 +97,7 @@ let rec g env known = function (* クロージャ変換ルーチン本体 (caml2
   | KNormal.LetTuple(xts, y, e) -> LetTuple(xts, y, g (M.add_list xts env) known e)
   | KNormal.Get(x, y) -> Get(x, y)
   | KNormal.Put(x, y, z) -> Put(x, y, z)
-  | KNormal.ExtArray(x) -> ExtArray(Id.L(x))
+  | KNormal.ExtArray(x, t) -> ExtArray(Id.L(x), t)
   | KNormal.ExtFunApp(x, ys) -> AppDir(Id.L("min_caml_" ^ x), ys)
 
 let f e =

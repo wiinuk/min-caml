@@ -54,7 +54,7 @@
     <Content Include="packages.config" />
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="asm.ml" />
-    <Compile Include="virtual.ml" />
+    <Compile Include="virtual.fs" />
     <Compile Include="simm.ml" />
     <Compile Include="regAlloc.ml" />
     <Compile Include="emit.ml" />

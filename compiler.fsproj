@@ -65,7 +65,7 @@
     <Compile Include="id.ml" />
     <Compile Include="syntax.ml" />
     <FsYacc Include="parser.mly">
-      <OtherFlags>--light-off --module Parser --open "FSharp.Compatibility.OCaml"</OtherFlags>
+      <OtherFlags>--light-off --module Parser --ml-compatibility</OtherFlags>
     </FsYacc>
     <Compile Include="parser.fsi">
       <DependentUpon>parser.mly</DependentUpon>

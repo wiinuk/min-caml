@@ -7,6 +7,7 @@ type t = (* 命令の列 (caml2html: sparcasm_t) *)
 and exp = (* 一つ一つの命令に対応する式 (caml2html: sparcasm_exp) *)
   | Nop
   | Set of int
+  | SetF of float
   | SetL of Id.l
   | Mov of Id.t
   | Neg of Id.t
@@ -34,9 +35,9 @@ and exp = (* 一つ一つの命令に対応する式 (caml2html: sparcasm_exp) *
   | CallDir of Id.l * Id.t list * Id.t list
   | Save of Id.t * Id.t (* レジスタ変数の値をスタック変数へ保存 (caml2html: sparcasm_save) *)
   | Restore of Id.t (* スタック変数から値を復元 (caml2html: sparcasm_restore) *)
-type fundef = { name : Id.l; args : Id.t list; fargs : Id.t list; body : t; ret : Type.t }
+type fundef = { name : Id.l; args : (Id.t * Type.t) list; body : t; ret : Type.t }
 (* プログラム全体 = 浮動小数点数テーブル + トップレベル関数 + メインの式 (caml2html: sparcasm_prog) *)
-type prog = Prog of (Id.l * float) list * fundef list * t
+type prog = Prog of fundef list * t
 
 let fletd(x, e1, e2) = Let((x, Type.Float), e1, e2)
 let seq(e1, e2) = Let((Id.gentmp Type.Unit, Type.Unit), e1, e2)
@@ -56,6 +57,25 @@ let reg_hp = "min_caml_hp" (* heap pointer (caml2html: sparcasm_reghp) *)
 (* let reg_ra = "%eax" (* return address *) *)
 let is_reg x = (String.get x 0 = '%' || x = reg_hp)
 
+let rec type_name = function
+    | Type.Array t -> type_name t ^ "[]"
+    | Type.Bool -> "bool"
+    | Type.Float -> "float64"
+    | Type.Fun(args, result) ->
+        let arity = List.length args + 1 in
+        "class System.Func`" ^ string_of_int arity ^ "<" ^ type_name_many (args @ [result]) ^ ">"
+
+    | Type.Int -> "int32"
+    | Type.Tuple ts ->
+        let arity = List.length ts in
+        "class System.Tuple`" ^ string_of_int arity ^ "<" ^ type_name_many ts ^ ">"
+
+    | Type.Unit -> "object"
+    | Type.Var { contents = Some t } -> type_name t
+    | Type.Var { contents = None } -> failwith "unexpected type 'Var'"
+
+and type_name_many args = String.concat ", " (List.map type_name args)
+
 (* super-tenuki *)
 let rec remove_and_uniq xs = function
   | [] -> []
@@ -66,7 +86,7 @@ let rec remove_and_uniq xs = function
 let fv_id_or_imm = function V(x) -> [x] | _ -> []
 module Fv = struct
     let rec fv_exp = function
-      | Nop | Set(_) | SetL(_) | Comment(_) | Restore(_) -> []
+      | Nop | Set(_) | SetF(_) | SetL(_) | Comment(_) | Restore(_) -> []
       | Mov(x) | Neg(x) | FMovD(x) | FNegD(x) | Save(x, _) -> [x]
       | Add(x, y') | Sub(x, y') | Ld(x, y', _) | LdDF(x, y', _) -> x :: fv_id_or_imm y'
       | St(x, y, z', _) | StDF(x, y, z', _) -> x :: y :: fv_id_or_imm z'

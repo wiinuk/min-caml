@@ -49,10 +49,11 @@ let rec g oc = function (* 命令列のアセンブリ生成 (caml2html: emit_g)
   | dest, Let((x, t), exp, e) ->
       g' oc (NonTail(x), exp);
       g oc (dest, e)
+
 and g' oc = function (* 各命令のアセンブリ生成 (caml2html: emit_gprime) *)
   (* 末尾でなかったら計算結果をdestにセット (caml2html: emit_nontail) *)
   | NonTail(_), Nop -> ()
-  | NonTail(x), Set(i) -> Printf.fprintf oc "\tmovl\t$%d, %s\n" i x
+  | NonTail(x), Set(i) -> Printf.fprintf oc "    ldc.movl\t$%d, %s\n" i x
   | NonTail(x), SetL(Id.L(y)) -> Printf.fprintf oc "\tmovl\t$%s, %s\n" y x
   | NonTail(x), Mov(y) ->
       if x <> y then Printf.fprintf oc "\tmovl\t%s, %s\n" y x
@@ -246,46 +247,62 @@ and g'_args oc x_reg_cl ys zs =
     (fun (z, fr) -> Printf.fprintf oc "\tmovsd\t%s, %s\n" z fr)
     (shuffle sw zfrs)
 
-let h oc { name = Id.L(x); args = _; fargs = _; body = e; ret = _ } =
-  Printf.fprintf oc "%s:\n" x;
-  stackset := S.empty;
-  stackmap := [];
-  g oc (Tail, e)
+(* [TODO] エスケープ処理 *)
+let emit_name oc x = fprintf oc "'%s'" x
+let emit_arg oc (x, t) =
+    emit_name oc x;
+    fprintf oc " %s" (type_name t)
 
-let f oc (Prog(data, fundefs, e)) =
-  Format.eprintf "generating assembly...@.";
-  Printf.fprintf oc ".data\n";
-  Printf.fprintf oc ".balign\t8\n";
-  List.iter
-    (fun (Id.L(x), d) ->
-      Printf.fprintf oc "%s:\t# %f\n" x d;
-      Printf.fprintf oc "\t.long\t0x%x\n" (gethi d);
-      Printf.fprintf oc "\t.long\t0x%x\n" (getlo d))
-    data;
-  Printf.fprintf oc ".text\n";
-  List.iter (fun fundef -> h oc fundef) fundefs;
-  Printf.fprintf oc ".globl\tmin_caml_start\n";
-  Printf.fprintf oc "min_caml_start:\n";
-  Printf.fprintf oc ".globl\t_min_caml_start\n";
-  Printf.fprintf oc "_min_caml_start: # for cygwin\n";
-  Printf.fprintf oc "\tpushl\t%%eax\n";
-  Printf.fprintf oc "\tpushl\t%%ebx\n";
-  Printf.fprintf oc "\tpushl\t%%ecx\n";
-  Printf.fprintf oc "\tpushl\t%%edx\n";
-  Printf.fprintf oc "\tpushl\t%%esi\n";
-  Printf.fprintf oc "\tpushl\t%%edi\n";
-  Printf.fprintf oc "\tpushl\t%%ebp\n";
-  Printf.fprintf oc "\tmovl\t32(%%esp),%s\n" reg_sp;
-  Printf.fprintf oc "\tmovl\t36(%%esp),%s\n" regs.(0);
-  Printf.fprintf oc "\tmovl\t%s,%s\n" regs.(0) reg_hp;
+let emit_sep oc emit sep = function
+    | [] -> ()
+    | x::xs ->
+        emit oc x;
+        List.iter (fun x ->
+            fprintf oc "%s" sep;
+            emit oc x
+        ) xs
+
+let h oc isEmptyPoint { name = Id.L(x); args = args; body = e; ret = ret } =
+    fprintf oc ".method public static %s '%s'(" (type_name ret) x;
+    emit_sep oc emit_arg ", " args;
+    fprintfn oc ")";
+    fprintfn oc "{";
+    (if isEmptyPoint then fprintfn oc "    .entrypoint");
+    stackset := S.empty;
+    stackmap := [];
+    g oc (Tail, e);
+    fprintfn oc "}"
+
+let f oc (Prog(fundefs, e)) =
+  eprintf "generating assembly...@.";
+
+  fprintfn oc ".assembly mincaml_module_0";
+  fprintfn oc ".assembly extern mscorlib {}";
+
+  for f in fundefs do h oc false f done;
+
+  fprintfn oc ".globl\tmin_caml_start";
+  fprintfn oc "min_caml_start:";
+  fprintfn oc ".globl\t_min_caml_start";
+  fprintfn oc "_min_caml_start: # for cygwin";
+  fprintfn oc "\tpushl\t%%eax";
+  fprintfn oc "\tpushl\t%%ebx";
+  fprintfn oc "\tpushl\t%%ecx";
+  fprintfn oc "\tpushl\t%%edx";
+  fprintfn oc "\tpushl\t%%esi";
+  fprintfn oc "\tpushl\t%%edi";
+  fprintfn oc "\tpushl\t%%ebp";
+  fprintfn oc "\tmovl\t32(%%esp),%s" reg_sp;
+  fprintfn oc "\tmovl\t36(%%esp),%s" regs.(0);
+  fprintfn oc "\tmovl\t%s,%s" regs.(0) reg_hp;
   stackset := S.empty;
   stackmap := [];
   g oc (NonTail(regs.(0)), e);
-  Printf.fprintf oc "\tpopl\t%%ebp\n";
-  Printf.fprintf oc "\tpopl\t%%edi\n";
-  Printf.fprintf oc "\tpopl\t%%esi\n";
-  Printf.fprintf oc "\tpopl\t%%edx\n";
-  Printf.fprintf oc "\tpopl\t%%ecx\n";
-  Printf.fprintf oc "\tpopl\t%%ebx\n";
-  Printf.fprintf oc "\tpopl\t%%eax\n";
-  Printf.fprintf oc "\tret\n";
+  fprintfn oc "\tpopl\t%%ebp";
+  fprintfn oc "\tpopl\t%%edi";
+  fprintfn oc "\tpopl\t%%esi";
+  fprintfn oc "\tpopl\t%%edx";
+  fprintfn oc "\tpopl\t%%ecx";
+  fprintfn oc "\tpopl\t%%ebx";
+  fprintfn oc "\tpopl\t%%eax";
+  fprintfn oc "\tret";

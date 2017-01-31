@@ -22,7 +22,7 @@ type t = (* K正規化後の式 (caml2html: knormal_t) *)
   | LetTuple of (Id.t * Type.t) list * Id.t * t
   | Get of Id.t * Id.t
   | Put of Id.t * Id.t * Id.t
-  | ExtArray of Id.t
+  | ExtArray of Id.t * Type.t
   | ExtFunApp of Id.t * Id.t list
 and fundef = { name : Id.t * Type.t; args : (Id.t * Type.t) list; body : t }
 
@@ -110,7 +110,7 @@ let rec g env = function (* K正規化ルーチン本体 (caml2html: knormal_g) 
   | Syntax.Var(x) when M.mem x env -> Var(x), M.find x env
   | Syntax.Var(x) -> (* 外部配列の参照 (caml2html: knormal_extarray) *)
       (match M.find x !Typing.extenv with
-      | Type.Array(_) as t -> ExtArray x, t
+      | Type.Array(et) as t -> ExtArray(x, et), t
       | _ -> failwith (Printf.sprintf "external variable %s does not have an array type" x))
   | Syntax.LetRec({ Syntax.name = (x, t); Syntax.args = yts; Syntax.body = e1 }, e2) ->
       let env' = M.add x t env in

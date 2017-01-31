@@ -3,7 +3,10 @@
 let empty = Map.empty
 let add k v map = Map.add k v map
 let mem k map = Map.containsKey k map
-let find k map = Map.find k map
+let find k map =
+    try Map.find k map
+    with :? System.Collections.Generic.KeyNotFoundException -> raise Not_found
+
 let map f map = Map.map (fun _ v -> f v) map
 let remove k map = Map.remove k map
 

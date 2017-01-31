@@ -2,9 +2,9 @@
 #light "off"
 module Parser
 #nowarn "64";; // turn off warnings that type variables used in production annotations are instantiated to concrete type
-open FSharp.Compatibility.OCaml
 open Microsoft.FSharp.Text.Lexing
 open Microsoft.FSharp.Text.Parsing.ParseHelpers
+open Microsoft.FSharp.Compatibility.OCaml.Parsing
 # 1 "parser.mly"
 
 (* parserが利用する変数、関数、型などの定義 *)
@@ -297,6 +297,7 @@ let _fsyacc_immediateActions = [|65535us; 65535us; 65535us; 65535us; 16385us; 16
 let _fsyacc_reductions ()  =    [| 
 # 298 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
                 (
@@ -304,8 +305,9 @@ let _fsyacc_reductions ()  =    [|
                       raise (Microsoft.FSharp.Text.Parsing.Accept(Microsoft.FSharp.Core.Operators.box _1))
                    )
                  : '_startexp));
-# 307 "parser.fs"
+# 308 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _2 = (let data = parseState.GetInput(2) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
                 (
@@ -315,8 +317,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 61 "parser.mly"
                  : 'simple_exp));
-# 318 "parser.fs"
+# 320 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             Microsoft.FSharp.Core.Operators.box
                 (
                    (
@@ -325,8 +328,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 63 "parser.mly"
                  : 'simple_exp));
-# 328 "parser.fs"
+# 331 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : bool)) in
             Microsoft.FSharp.Core.Operators.box
                 (
@@ -336,8 +340,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 65 "parser.mly"
                  : 'simple_exp));
-# 339 "parser.fs"
+# 343 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : int)) in
             Microsoft.FSharp.Core.Operators.box
                 (
@@ -347,8 +352,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 67 "parser.mly"
                  : 'simple_exp));
-# 350 "parser.fs"
+# 355 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : float)) in
             Microsoft.FSharp.Core.Operators.box
                 (
@@ -358,8 +364,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 69 "parser.mly"
                  : 'simple_exp));
-# 361 "parser.fs"
+# 367 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Id.t)) in
             Microsoft.FSharp.Core.Operators.box
                 (
@@ -369,8 +376,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 71 "parser.mly"
                  : 'simple_exp));
-# 372 "parser.fs"
+# 379 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : 'simple_exp)) in
             let _4 = (let data = parseState.GetInput(4) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
@@ -381,8 +389,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 73 "parser.mly"
                  : 'simple_exp));
-# 384 "parser.fs"
+# 392 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : 'simple_exp)) in
             Microsoft.FSharp.Core.Operators.box
                 (
@@ -392,8 +401,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 77 "parser.mly"
                  : Syntax.t));
-# 395 "parser.fs"
+# 404 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _2 = (let data = parseState.GetInput(2) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
                 (
@@ -403,8 +413,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 80 "parser.mly"
                  : Syntax.t));
-# 406 "parser.fs"
+# 416 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _2 = (let data = parseState.GetInput(2) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
                 (
@@ -416,8 +427,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 83 "parser.mly"
                  : Syntax.t));
-# 419 "parser.fs"
+# 430 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             let _3 = (let data = parseState.GetInput(3) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
@@ -428,8 +440,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 87 "parser.mly"
                  : Syntax.t));
-# 431 "parser.fs"
+# 443 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             let _3 = (let data = parseState.GetInput(3) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
@@ -440,8 +453,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 89 "parser.mly"
                  : Syntax.t));
-# 443 "parser.fs"
+# 456 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             let _3 = (let data = parseState.GetInput(3) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
@@ -452,8 +466,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 91 "parser.mly"
                  : Syntax.t));
-# 455 "parser.fs"
+# 469 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             let _3 = (let data = parseState.GetInput(3) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
@@ -464,8 +479,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 93 "parser.mly"
                  : Syntax.t));
-# 467 "parser.fs"
+# 482 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             let _3 = (let data = parseState.GetInput(3) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
@@ -476,8 +492,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 95 "parser.mly"
                  : Syntax.t));
-# 479 "parser.fs"
+# 495 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             let _3 = (let data = parseState.GetInput(3) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
@@ -488,8 +505,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 97 "parser.mly"
                  : Syntax.t));
-# 491 "parser.fs"
+# 508 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             let _3 = (let data = parseState.GetInput(3) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
@@ -500,8 +518,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 99 "parser.mly"
                  : Syntax.t));
-# 503 "parser.fs"
+# 521 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             let _3 = (let data = parseState.GetInput(3) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
@@ -512,8 +531,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 101 "parser.mly"
                  : Syntax.t));
-# 515 "parser.fs"
+# 534 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _2 = (let data = parseState.GetInput(2) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             let _4 = (let data = parseState.GetInput(4) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             let _6 = (let data = parseState.GetInput(6) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
@@ -525,8 +545,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 104 "parser.mly"
                  : Syntax.t));
-# 528 "parser.fs"
+# 548 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _2 = (let data = parseState.GetInput(2) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
                 (
@@ -536,8 +557,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 107 "parser.mly"
                  : Syntax.t));
-# 539 "parser.fs"
+# 560 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             let _3 = (let data = parseState.GetInput(3) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
@@ -548,8 +570,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 109 "parser.mly"
                  : Syntax.t));
-# 551 "parser.fs"
+# 573 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             let _3 = (let data = parseState.GetInput(3) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
@@ -560,8 +583,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 111 "parser.mly"
                  : Syntax.t));
-# 563 "parser.fs"
+# 586 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             let _3 = (let data = parseState.GetInput(3) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
@@ -572,8 +596,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 113 "parser.mly"
                  : Syntax.t));
-# 575 "parser.fs"
+# 599 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             let _3 = (let data = parseState.GetInput(3) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
@@ -584,8 +609,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 115 "parser.mly"
                  : Syntax.t));
-# 587 "parser.fs"
+# 612 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _2 = (let data = parseState.GetInput(2) in (Microsoft.FSharp.Core.Operators.unbox data : Id.t)) in
             let _4 = (let data = parseState.GetInput(4) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             let _6 = (let data = parseState.GetInput(6) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
@@ -597,8 +623,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 118 "parser.mly"
                  : Syntax.t));
-# 600 "parser.fs"
+# 626 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _3 = (let data = parseState.GetInput(3) in (Microsoft.FSharp.Core.Operators.unbox data : 'fundef)) in
             let _5 = (let data = parseState.GetInput(5) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
@@ -609,8 +636,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 121 "parser.mly"
                  : Syntax.t));
-# 612 "parser.fs"
+# 639 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             let _2 = (let data = parseState.GetInput(2) in (Microsoft.FSharp.Core.Operators.unbox data : 'actual_args)) in
             Microsoft.FSharp.Core.Operators.box
@@ -621,8 +649,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 124 "parser.mly"
                  : Syntax.t));
-# 624 "parser.fs"
+# 652 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : 'elems)) in
             Microsoft.FSharp.Core.Operators.box
                 (
@@ -632,8 +661,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 126 "parser.mly"
                  : Syntax.t));
-# 635 "parser.fs"
+# 664 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _3 = (let data = parseState.GetInput(3) in (Microsoft.FSharp.Core.Operators.unbox data : 'pat)) in
             let _6 = (let data = parseState.GetInput(6) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             let _8 = (let data = parseState.GetInput(8) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
@@ -645,8 +675,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 128 "parser.mly"
                  : Syntax.t));
-# 648 "parser.fs"
+# 678 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : 'simple_exp)) in
             let _4 = (let data = parseState.GetInput(4) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             let _7 = (let data = parseState.GetInput(7) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
@@ -658,8 +689,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 130 "parser.mly"
                  : Syntax.t));
-# 661 "parser.fs"
+# 692 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             let _3 = (let data = parseState.GetInput(3) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
@@ -670,8 +702,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 132 "parser.mly"
                  : Syntax.t));
-# 673 "parser.fs"
+# 705 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _2 = (let data = parseState.GetInput(2) in (Microsoft.FSharp.Core.Operators.unbox data : 'simple_exp)) in
             let _3 = (let data = parseState.GetInput(3) in (Microsoft.FSharp.Core.Operators.unbox data : 'simple_exp)) in
             Microsoft.FSharp.Core.Operators.box
@@ -682,8 +715,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 135 "parser.mly"
                  : Syntax.t));
-# 685 "parser.fs"
+# 718 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             Microsoft.FSharp.Core.Operators.box
                 (
                    (
@@ -695,8 +729,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 137 "parser.mly"
                  : Syntax.t));
-# 698 "parser.fs"
+# 732 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Id.t)) in
             let _2 = (let data = parseState.GetInput(2) in (Microsoft.FSharp.Core.Operators.unbox data : 'formal_args)) in
             let _4 = (let data = parseState.GetInput(4) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
@@ -708,8 +743,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 144 "parser.mly"
                  : 'fundef));
-# 711 "parser.fs"
+# 746 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Id.t)) in
             let _2 = (let data = parseState.GetInput(2) in (Microsoft.FSharp.Core.Operators.unbox data : 'formal_args)) in
             Microsoft.FSharp.Core.Operators.box
@@ -720,8 +756,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 148 "parser.mly"
                  : 'formal_args));
-# 723 "parser.fs"
+# 759 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Id.t)) in
             Microsoft.FSharp.Core.Operators.box
                 (
@@ -731,8 +768,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 150 "parser.mly"
                  : 'formal_args));
-# 734 "parser.fs"
+# 771 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : 'actual_args)) in
             let _2 = (let data = parseState.GetInput(2) in (Microsoft.FSharp.Core.Operators.unbox data : 'simple_exp)) in
             Microsoft.FSharp.Core.Operators.box
@@ -743,8 +781,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 155 "parser.mly"
                  : 'actual_args));
-# 746 "parser.fs"
+# 784 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : 'simple_exp)) in
             Microsoft.FSharp.Core.Operators.box
                 (
@@ -754,8 +793,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 158 "parser.mly"
                  : 'actual_args));
-# 757 "parser.fs"
+# 796 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : 'elems)) in
             let _3 = (let data = parseState.GetInput(3) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
@@ -766,8 +806,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 162 "parser.mly"
                  : 'elems));
-# 769 "parser.fs"
+# 809 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             let _3 = (let data = parseState.GetInput(3) in (Microsoft.FSharp.Core.Operators.unbox data : Syntax.t)) in
             Microsoft.FSharp.Core.Operators.box
@@ -778,8 +819,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 164 "parser.mly"
                  : 'elems));
-# 781 "parser.fs"
+# 822 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : 'pat)) in
             let _3 = (let data = parseState.GetInput(3) in (Microsoft.FSharp.Core.Operators.unbox data : Id.t)) in
             Microsoft.FSharp.Core.Operators.box
@@ -790,8 +832,9 @@ let _fsyacc_reductions ()  =    [|
                    )
 # 168 "parser.mly"
                  : 'pat));
-# 793 "parser.fs"
+# 835 "parser.fs"
         (fun (parseState : Microsoft.FSharp.Text.Parsing.IParseState) ->
+            Parsing.set_parse_state parseState;
             let _1 = (let data = parseState.GetInput(1) in (Microsoft.FSharp.Core.Operators.unbox data : Id.t)) in
             let _3 = (let data = parseState.GetInput(3) in (Microsoft.FSharp.Core.Operators.unbox data : Id.t)) in
             Microsoft.FSharp.Core.Operators.box
@@ -803,7 +846,7 @@ let _fsyacc_reductions ()  =    [|
 # 170 "parser.mly"
                  : 'pat));
 |]
-# 806 "parser.fs"
+# 849 "parser.fs"
 let tables () : Microsoft.FSharp.Text.Parsing.Tables<_> = 
   { reductions= _fsyacc_reductions ();
     endOfInputTag = _fsyacc_endOfInputTag;
