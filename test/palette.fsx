@@ -1,7 +1,7 @@
 ﻿#r "../packages/FsLexYacc.Runtime.6.1.0/lib/net40/FsLexYacc.Runtime.dll"
 #r "../packages/FSharp.Compatibility.OCaml.0.2.0/lib/net40/FSharp.Compatibility.OCaml.dll"
 #r "../packages/FSharp.Compatibility.OCaml.LexYacc.0.2.0/lib/net40/FSharp.Compatibility.OCaml.LexYacc.dll"
-#r "../bin/debug/MinCaml.Compiler.dll"
+#r "../bin/debug/MinCaml.Compiler.Ast.dll"
 
 /// 最適化処理をくりかえす
 let rec iter n e =
@@ -76,3 +76,4 @@ string """
 let x = xs.(0) in
 ()
 """
+

@@ -53,11 +53,11 @@
   <ItemGroup>
     <Content Include="packages.config" />
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="asm.ml" />
+    <Compile Include="asm.fs" />
     <Compile Include="virtual.fs" />
-    <Compile Include="simm.ml" />
-    <Compile Include="regAlloc.ml" />
-    <Compile Include="emit.ml" />
+    <Compile Include="simm.fs" />
+    <Compile Include="regAlloc.fs" />
+    <Compile Include="emit.fs" />
     <Compile Include="..\main.ml">
       <Link>main.ml</Link>
     </Compile>
