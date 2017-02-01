@@ -1,4 +1,4 @@
-module private Emit
+module Emit
 open Asm
 open FSharp.Compatibility.OCaml
 

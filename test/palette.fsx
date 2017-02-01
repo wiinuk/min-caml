@@ -1,7 +1,10 @@
-﻿#r "../packages/FsLexYacc.Runtime.6.1.0/lib/net40/FsLexYacc.Runtime.dll"
-#r "../packages/FSharp.Compatibility.OCaml.0.2.0/lib/net40/FSharp.Compatibility.OCaml.dll"
-#r "../packages/FSharp.Compatibility.OCaml.LexYacc.0.2.0/lib/net40/FSharp.Compatibility.OCaml.LexYacc.dll"
-#r "../bin/debug/MinCaml.Compiler.Ast.dll"
+﻿#I "../dotnet/MinCaml.Compiler.Cli/bin/debug"
+
+#r "FsLexYacc.Runtime"
+#r "FSharp.Compatibility.OCaml"
+#r "FSharp.Compatibility.OCaml.LexYacc"
+#r "MinCaml.Compiler.Ast"
+#r "MinCaml.Compiler.Cli"
 
 /// 最適化処理をくりかえす
 let rec iter n e =

@@ -5,14 +5,14 @@
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>e9f98836-dc5c-4135-a8c4-1de3c257980e</ProjectGuid>
+    <ProjectGuid>{190770ad-db4e-42da-9d71-5b5370a4afb7}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <RootNamespace>min_caml_dotnet</RootNamespace>
     <AssemblyName>min-caml</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <TargetFSharpCoreVersion>4.4.0.0</TargetFSharpCoreVersion>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-    <Name>compiler.dotnet</Name>
+    <Name>min-caml</Name>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -24,6 +24,7 @@
     <WarningLevel>3</WarningLevel>
     <DocumentationFile>bin\Debug\min-caml.XML</DocumentationFile>
     <OtherFlags>--standalone --mlcompatibility</OtherFlags>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -53,34 +54,29 @@
   <ItemGroup>
     <Content Include="packages.config" />
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="asm.fs" />
-    <Compile Include="virtual.fs" />
-    <Compile Include="simm.fs" />
-    <Compile Include="regAlloc.fs" />
-    <Compile Include="emit.fs" />
-    <Compile Include="..\main.ml">
+    <Compile Include="..\..\main.ml">
       <Link>main.ml</Link>
     </Compile>
   </ItemGroup>
   <ItemGroup>
     <Reference Include="FSharp.Compatibility.OCaml">
-      <HintPath>..\packages\FSharp.Compatibility.OCaml.0.2.0\lib\net40\FSharp.Compatibility.OCaml.dll</HintPath>
+      <HintPath>..\..\packages\FSharp.Compatibility.OCaml.0.2.0\lib\net40\FSharp.Compatibility.OCaml.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="FSharp.Compatibility.OCaml.LexYacc">
-      <HintPath>..\packages\FSharp.Compatibility.OCaml.LexYacc.0.2.0\lib\net40\FSharp.Compatibility.OCaml.LexYacc.dll</HintPath>
+      <HintPath>..\..\packages\FSharp.Compatibility.OCaml.LexYacc.0.2.0\lib\net40\FSharp.Compatibility.OCaml.LexYacc.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="FSharp.Compatibility.OCaml.System">
-      <HintPath>..\packages\FSharp.Compatibility.OCaml.System.0.2.0\lib\net40\FSharp.Compatibility.OCaml.System.dll</HintPath>
+      <HintPath>..\..\packages\FSharp.Compatibility.OCaml.System.0.2.0\lib\net40\FSharp.Compatibility.OCaml.System.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="FSharp.Core">
-      <HintPath>..\packages\FSharp.Core.4.0.0.1\lib\net40\FSharp.Core.dll</HintPath>
+      <HintPath>..\..\packages\FSharp.Core.4.0.0.1\lib\net40\FSharp.Core.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="FsLexYacc.Runtime">
-      <HintPath>..\packages\FsLexYacc.Runtime.6.1.0\lib\net40\FsLexYacc.Runtime.dll</HintPath>
+      <HintPath>..\..\packages\FsLexYacc.Runtime.6.1.0\lib\net40\FsLexYacc.Runtime.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="mscorlib" />
@@ -89,9 +85,14 @@
     <Reference Include="System.Numerics" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\compiler.fsproj">
-      <Name>compiler</Name>
+    <ProjectReference Include="..\..\MinCaml.Compiler.Ast.fsproj">
+      <Name>MinCaml.Compiler.Ast</Name>
       <Project>{3d7efd39-b8de-48b7-9e3b-9c1cc1449336}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\MinCaml.Compiler.Cli\MinCaml.Compiler.Cli.fsproj">
+      <Name>MinCaml.Compiler.Cli</Name>
+      <Project>{e9f98836-dc5c-4135-a8c4-1de3c257980e}</Project>
       <Private>True</Private>
     </ProjectReference>
   </ItemGroup>

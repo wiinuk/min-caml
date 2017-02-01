@@ -1,4 +1,4 @@
-﻿namespace MinCaml.Compiler.Ast.AssemblyInfo
+﻿namespace MinCaml.Compiler.Cli.AssemblyInfo
 
 open System.Reflection
 open System.Runtime.CompilerServices
@@ -7,11 +7,11 @@ open System.Runtime.InteropServices
 // アセンブリに関する一般情報は、以下の属性セットによって
 // 制御されます。アセンブリに関連付けられている情報を変更するには、
 // これらの属性値を変更します。
-[<assembly: AssemblyTitle("MinCaml.Compiler.Ast")>]
+[<assembly: AssemblyTitle("MinCaml.Compiler.Cli")>]
 [<assembly: AssemblyDescription("")>]
 [<assembly: AssemblyConfiguration("")>]
 [<assembly: AssemblyCompany("")>]
-[<assembly: AssemblyProduct("MinCaml.Compiler.Ast")>]
+[<assembly: AssemblyProduct("MinCaml.Compiler.Cli")>]
 [<assembly: AssemblyCopyright("Copyright ©  2017")>]
 [<assembly: AssemblyTrademark("")>]
 [<assembly: AssemblyCulture("")>]
@@ -22,7 +22,7 @@ open System.Runtime.InteropServices
 [<assembly: ComVisible(false)>]
 
 // このプロジェクトが COM に公開される場合、次の GUID がタイプ ライブラリの ID になります
-[<assembly: Guid("3d7efd39-b8de-48b7-9e3b-9c1cc1449336")>]
+[<assembly: Guid("e9f98836-dc5c-4135-a8c4-1de3c257980e")>]
 
 // アセンブリのバージョン情報は、以下の 4 つの値で構成されます。:
 // 
@@ -35,7 +35,7 @@ open System.Runtime.InteropServices
 // 既定値にすることができます。:
 // [<assembly: AssemblyVersion("1.0.*")>]
 [<assembly: AssemblyVersion("0.0.1.*")>]
-[<assembly: AssemblyFileVersion("0.0.1.0")>]
+[<assembly: AssemblyFileVersion("0.0.1.*")>]
 
 do
     ()
