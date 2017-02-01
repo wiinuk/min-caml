@@ -71,6 +71,7 @@ and exp =
     | Ldloc of Id.t
     | Stloc of Id.t
     | Dup
+    | Pop
 
     | Ldnull
     | Ldc_I4 of int32
@@ -124,7 +125,7 @@ type method_body = {
 type method_def = {
     access: accesibility
     callconv: call_conv
-    resultType: Type.t
+    resultType: cli_type
     name: Id.l
     args: (Id.t * Type.t) list
     isForwardref: bool

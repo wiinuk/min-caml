@@ -17,7 +17,7 @@ type t = (* クロージャ変換後の式 (caml2html: closure_t) *)
   | Var of Id.t
   | MakeCls of (Id.t * Type.t) * closure * t
   | AppCls of Id.t * Id.t list
-  | AppDir of Id.l * Id.t list
+  | AppDir of (Id.l * (* function type *) Type.t) * Id.t list
   | Tuple of Id.t list
   | LetTuple of (Id.t * Type.t) list * Id.t * t
   | Get of Id.t * Id.t
@@ -66,7 +66,7 @@ let rec g env known = function (* クロージャ変換ルーチン本体 (caml2
 	 と仮定し、knownに追加してe1をクロージャ変換してみる *)
       let toplevel_backup = !toplevel in
       let env' = M.add x t env in
-      let known' = S.add x known in
+      let known' = M.add x t known in
       let e1' = g (M.add_list yts env') known' e1 in
       (* 本当に自由変数がなかったか、変換結果e1'を確認する *)
       (* 注意: e1'にx自身が変数として出現する場合はclosureが必要!
@@ -89,18 +89,18 @@ let rec g env known = function (* クロージャ変換ルーチン本体 (caml2
       else
 	(Format.eprintf "eliminating closure(s) %s@." x;
 	 e2') (* 出現しなければMakeClsを削除 *)
-  | KNormal.App(x, ys) when S.mem x known -> (* 関数適用の場合 (caml2html: closure_app) *)
+  | KNormal.App(x, ys) when M.mem x known -> (* 関数適用の場合 (caml2html: closure_app) *)
       Format.eprintf "directly applying %s@." x;
-      AppDir(Id.L(x), ys)
+      AppDir((Id.L(x), M.find x known), ys)
   | KNormal.App(f, xs) -> AppCls(f, xs)
   | KNormal.Tuple(xs) -> Tuple(xs)
   | KNormal.LetTuple(xts, y, e) -> LetTuple(xts, y, g (M.add_list xts env) known e)
   | KNormal.Get(x, y) -> Get(x, y)
   | KNormal.Put(x, y, z) -> Put(x, y, z)
   | KNormal.ExtArray(x, t) -> ExtArray(Id.L(x), t)
-  | KNormal.ExtFunApp(x, ys) -> AppDir(Id.L("min_caml_" ^ x), ys)
+  | KNormal.ExtFunApp((x, t), ys) -> AppDir((Id.L("min_caml_" ^ x), t), ys)
 
 let f e =
   toplevel := [];
-  let e' = g M.empty S.empty e in
+  let e' = g M.empty M.empty e in
   Prog(List.rev !toplevel, e')

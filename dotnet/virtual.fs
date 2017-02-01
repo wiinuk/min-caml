@@ -11,13 +11,13 @@ type location =
 
 let topLevelTypeName = "MinCamlModule"
 let topLevelType = TypeName(Class, [], [], [], topLevelTypeName, [])
-let entrypointName = Id.L "MinCamlMain"
+let entrypointName = Id.L "MinCamlEntryPoint"
 let localTypeToCliType (Id.L n) = TypeName(Class, [], [], [topLevelTypeName], n, [])
 
 let emptyBody = {
     isEntrypoint = false
     locals = []
-    opcodes = []
+    opcodes = [Ret]
 }
 let rec extarrays_t acc = function
     | Closure.IfEq(_, _, e1, e2)
@@ -30,17 +30,48 @@ let rec extarrays_t acc = function
         let methoddef = {
             access = Public
             callconv = Static
-            resultType = Type.Array et
+            resultType = Array <| cliType et
             name = name
             args = []
             isForwardref = true
             body = emptyBody
         }
-        Map.add name methoddef acc
+        Map.add x methoddef acc
 
     | _ -> acc
 
 let extarrays_f acc { Closure.body = e } = extarrays_t acc e
+
+let rec extfuncs env acc = function
+    | Closure.IfEq(_, _, e1, e2)
+    | Closure.IfLE(_, _, e1, e2) -> extfuncs env (extfuncs env acc e1) e2
+    | Closure.Let((l, t), e1, e2) -> extfuncs (Set.add l env) (extfuncs env acc e1) e2
+    | Closure.MakeCls((l, t), _, e2) -> extfuncs (Set.add l env) acc e2
+
+    | Closure.LetTuple(xts, _, e2) ->
+        let env = List.fold (fun env (x, _) -> Set.add x env) env xts
+        extfuncs env acc e2
+
+    | Closure.AppDir((Id.L x as name, t), _) ->
+        if Set.contains x env then acc else
+
+        let argTypes, resultType = match t with Type.Fun(ts, t) -> ts, t | _ -> assert_false()
+        let methoddef = {
+            access = Public
+            callconv = Static
+            resultType = cliType resultType
+            name = name
+            args = List.mapi (fun i t -> sprintf "arg%d" i, t) argTypes
+            isForwardref = true
+            body = emptyBody
+        }
+        Map.add x methoddef acc
+
+    | _ -> acc
+
+let extfuncs_f env acc { Closure.name = Id.L x, t; Closure.body = e } =
+    let env = Set.add x env
+    extfuncs env acc e, env
 
 let (++) xs x = x::xs
 let (+>) x f = f x
@@ -208,15 +239,15 @@ let rec g env locals acc = function (* 式の仮想マシンコード生成 (cam
     // ︙
     //
     // call $(typeof(x).result) MinCamlModule::$l($(typeof ys.[0]), $(typeof ys.[1]), …)
-    | Closure.AppDir(Id.L x as x', ys) ->
+    | Closure.AppDir((x, t), ys) ->
         let argTypes, resultType =
-            match M.find x env |> fst with
+            match t with
             | Type.Fun(argTypes, resultType) -> List.map cliType argTypes, cliType resultType
             | _ -> assert_false()
 
         acc
         +>g_loadMany ys env
-        ++Call(methodRef(Static, resultType, topLevelType, MethodName x', argTypes))
+        ++Call(methodRef(Static, resultType, topLevelType, MethodName x, argTypes))
 
     // 組の生成 (caml2html: virtual_tuple)
     | Closure.Tuple xs ->
@@ -330,7 +361,7 @@ let methodDef access callconv resultType (Id.L name' as name) args formalFvs isE
     {
         access = access
         callconv = callconv
-        resultType = resultType
+        resultType = cliType resultType
         name = name
         args = args
         isForwardref = false
@@ -412,13 +443,20 @@ let h = function
 /// プログラム全体の仮想マシンコード生成 (caml2html: virtual_f)
 let f (Closure.Prog(fundefs, e)) =
     let extarrays =
-        List.fold extarrays_f Map.empty fundefs
+        let acc = List.fold extarrays_f Map.empty fundefs
+        extarrays_t acc e
+        |> Map.toList
+        |> List.map (snd >> Method)
+
+    let extfuncs =
+        let acc, env = List.fold (fun (acc, env) f -> extfuncs_f env acc f) (Map.empty, Set.empty) fundefs
+        extfuncs env acc e
         |> Map.toList
         |> List.map (snd >> Method)
 
     let fundefs = List.map h fundefs
 
     Prog(
-        extarrays @ fundefs,
-        methodDef Public Static Type.Unit entrypointName [] [] true e
+        extarrays @ extfuncs @ fundefs,
+        methodDef Public Static Type.Unit entrypointName [] [] false e
     )

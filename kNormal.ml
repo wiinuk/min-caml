@@ -22,8 +22,8 @@ type t = (* K正規化後の式 (caml2html: knormal_t) *)
   | LetTuple of (Id.t * Type.t) list * Id.t * t
   | Get of Id.t * Id.t
   | Put of Id.t * Id.t * Id.t
-  | ExtArray of Id.t * Type.t
-  | ExtFunApp of Id.t * Id.t list
+  | ExtArray of Id.t * (* element type *) Type.t
+  | ExtFunApp of (Id.t * (* function type *) Type.t) * Id.t list
 and fundef = { name : Id.t * Type.t; args : (Id.t * Type.t) list; body : t }
 
 let rec fv = function (* 式に出現する（自由な）変数 (caml2html: knormal_fv) *)
@@ -119,9 +119,9 @@ let rec g env = function (* K正規化ルーチン本体 (caml2html: knormal_g) 
       LetRec({ name = (x, t); args = yts; body = e1' }, e2'), t2
   | Syntax.App(Syntax.Var(f), e2s) when not (M.mem f env) -> (* 外部関数の呼び出し (caml2html: knormal_extfunapp) *)
       (match M.find f !Typing.extenv with
-      | Type.Fun(_, t) ->
+      | Type.Fun(_, t) as ft ->
 	  let rec bind xs = function (* "xs" are identifiers for the arguments *)
-	    | [] -> ExtFunApp(f, xs), t
+	    | [] -> ExtFunApp((f, ft), xs), t
 	    | e2 :: e2s ->
 		insert_let (g env e2)
 		  (fun x -> bind (xs @ [x]) e2s) in
@@ -170,8 +170,8 @@ let rec g env = function (* K正規化ルーチン本体 (caml2html: knormal_g) 
 	    (fun y ->
 	      let l =
 		match t2 with
-		| Type.Float -> "create_float_array"
-		| _ -> "create_array" in
+		| Type.Float -> "create_float_array", Type.Fun([Type.Int; Type.Float], Type.Array t2)
+		| _ -> "create_array", Type.Fun([Type.Int; Type.Float], Type.Array t2) in
 	      ExtFunApp(l, [x; y]), Type.Array(t2)))
   | Syntax.Get(e1, e2) ->
       (match g env e1 with

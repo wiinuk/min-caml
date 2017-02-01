@@ -25,9 +25,20 @@ let groupCore emptyIfIgnore first emit sep last o = function
 let groupOrEmpty first emit sep last o xs = groupCore true first emit sep last o xs
 let group first emit sep last o xs = groupCore false first emit sep last o xs
 
-
 // TODO: エスケープ処理
-let name oc x = fprintf oc "'%s'" x
+let name oc = function
+| "" -> oc += "''"
+| x ->
+    let isIdentifier =
+        String.forall (fun c ->
+            ('a' <= c && c <= 'z') ||
+            ('A' <= c && c <= 'Z') ||
+            c = '_' ||
+            ('0' <= c && c <= '9')
+        ) x
+
+    if isIdentifier then oc += x
+    else fprintf oc "'%s'" x
 
 let rec type' oc = function
     | This -> oc += ".this"
@@ -47,8 +58,17 @@ let rec type' oc = function
         name oc typeName
         groupOrEmpty "<" type' ", " ">" oc typeArgs
         
-let arg oc (x, t) = name oc x; oc += " "; type' oc <| cliType t
-let args i oc xs = group "(" (fun oc x -> newline oc i; arg oc x) "," ")" oc xs
+let arg oc (x, t) = type' oc <| cliType t; oc += " "; name oc x
+let args i oc xs =
+    match xs with
+    | [] -> oc += "()"
+    | _ ->
+
+    newline oc i
+    oc += "("
+    group "" (fun oc x -> newline oc (i + 1); arg oc x) "," "" oc xs
+    newline oc i
+    oc += ")"
 
 let methodName oc = function
     | Ctor -> oc += ".ctor"
@@ -107,8 +127,9 @@ let stelem t = arrayAccess "stelem.u1" "stelem.i4" "stelem.r8" "stelem.ref" t
 let opcode oc = function
     | Label(Id.L l) -> name oc l; oc += ":"
 
-    | Add -> oc += "add"
     | Dup -> oc += "dup"
+    | Pop -> oc += "pop"
+    | Add -> oc += "add"
     | Neg -> oc += "neg"
     | Sub -> oc += "sub"
     | Mul -> oc += "mul"
@@ -125,7 +146,7 @@ let opcode oc = function
     | Ldloc l -> oc += "ldloc "; name oc l
     | Stloc l -> oc += "stloc "; name oc l
 
-    | Call m -> methodRef oc m
+    | Call m -> oc += "call "; methodRef oc m
     | Ret -> oc += "ret"
 
     | Ldelem t -> oc += ldelem t
@@ -147,10 +168,14 @@ let custom oc = function
     // TODO:
     | _ -> failwith "not implemented"
 
-// .method assembly hidebysig instance int32 '<F>b__0' (
+let accessNonNested = function
+    | Public -> "public "
+    | Default -> ""
+
+// .method assembly hidebysig instance int32 '<F>b__0'
+// (
 //     int32 x
 // )
-// cil managed
 // {
 //     .entrypoint
 //     .locals (
@@ -168,15 +193,11 @@ let methodBody i oc { isEntrypoint = isEntrypoint; locals = locals; opcodes = op
     | _ ->
         newline oc i
         oc += ".locals "
-        args (i + 1) oc locals
+        args i oc locals
 
     for op in ops do
         newline oc i
         opcode oc op
-
-let accessNonNested = function
-    | Public -> "public "
-    | Default -> ""
 
 let methodDef i oc
     {
@@ -193,12 +214,12 @@ let methodDef i oc
     oc += accessNonNested a
     oc += "hidebysig "
     oc += match c with Instance -> "instance " | Static -> "static "
-    type' oc <| cliType r
+    type' oc r
     oc += " "
     name oc n
-    args (i + 1) oc xs
-    newline oc i
-    oc += "cil managed"
+    args i oc xs
+    // newline oc i
+    // oc += "cil managed"
     oc += if isForwardref then " forwardref" else ""
     newline oc i
     oc += "{"
@@ -213,7 +234,7 @@ let fieldDef oc { access = a; fieldType = t; name = Id.L n } =
     name oc n
     
 let rec classDecl i oc = function
-    | Custom x -> oc += ".custom "; custom oc x; fprintfn oc ""
+    | Custom x -> oc += ".custom "; custom oc x
     | Method m -> oc += ".method "; methodDef i oc m
     | Field f -> oc += ".field "; fieldDef oc f
     | NestedClass c -> oc += ".class "; classDef true i oc c
@@ -231,18 +252,50 @@ and classDef nested i oc
     name oc n
     newline oc i
     oc += "{"
-    List.iter (classDecl (i + 1) oc) body
+    newline oc (i + 1)
+    for d in body do
+        classDecl (i + 1) oc d
+        newline oc i
     newline oc i
     oc += "}"
+
+let makeEntryPoint { name = n; resultType = resultType } =
+    let body = {
+        isEntrypoint = true
+        locals = []
+        opcodes =
+        [
+            Call <| Asm.methodRef(Static, resultType, Virtual.topLevelType, MethodName n, [])
+            Pop
+            Ret
+        ]
+    }
+    Method {
+        access = Public
+        callconv = Static
+        resultType = Void
+        name = Id.L "Main"
+        args = []
+        isForwardref = false
+        body = body
+    }
 
 let f oc (Prog(decls, e)) =
     eprintf "generating assembly...@."
 
-    fprintfn oc ".assembly mincaml_module_0"
+    fprintfn oc ".assembly mincaml_module_0 {}"
     fprintfn oc ".assembly extern mscorlib {}"
 
     fprintfn oc ".class public abstract sealed beforefieldinit %s" Virtual.topLevelTypeName
-    fprintfn oc "{"
-    for d in decls do classDecl 1 oc d
+    oc += "{"
+    newline oc 1
+    for d in decls do
+        classDecl 1 oc d
+        newline oc 1
     classDecl 1 oc <| Method e
+
+    newline oc 1
+    classDecl 1 oc <| makeEntryPoint e
+
+    newline oc 0
     fprintfn oc "}"
