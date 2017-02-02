@@ -42,7 +42,6 @@ let name oc = function
 
 let rec type' oc = function
     | This -> oc += ".this"
-    | Void -> oc += "void"
     | Bool -> oc += "bool"
     | Int32 -> oc += "int32"
     | Float64 -> oc += "float64"
@@ -57,7 +56,11 @@ let rec type' oc = function
         for x in nestedParents do (name oc x; oc += "/")
         name oc typeName
         groupOrEmpty "<" type' ", " ">" oc typeArgs
-        
+
+let resultType oc = function
+    | None -> oc += "void"
+    | Some t -> type' oc t
+
 let arg oc (x, t) = type' oc <| cliType t; oc += " "; name oc x
 let args i oc xs =
     match xs with
@@ -76,7 +79,7 @@ let methodName oc = function
 
 let methodRef oc { call_conv = c; resultType = r; declaringType = t; methodName = n; argTypes = ts } =
     oc += match c with Instance -> "instance " | Static -> ""
-    type' oc r
+    resultType oc r
     oc += " "
     type' oc t
     oc += "::"
@@ -138,7 +141,8 @@ let opcode oc = function
     | Ldnull -> oc += "ldnull"
     | Ldc_I4 x -> ldc_i4 oc x
     | Ldc_R8 x -> ldc_r8 oc x
-    
+
+    | Br(Id.L l) -> oc += "br "; name oc l
     | Beq(Id.L l) -> oc += "beq "; name oc l
     | Ble(Id.L l) -> oc += "ble "; name oc l
 
@@ -146,7 +150,10 @@ let opcode oc = function
     | Ldloc l -> oc += "ldloc "; name oc l
     | Stloc l -> oc += "stloc "; name oc l
 
-    | Call m -> oc += "call "; methodRef oc m
+    | Call(tail, m) ->
+        oc += if tail then "tail. call " else "call "
+        methodRef oc m
+
     | Ret -> oc += "ret"
 
     | Ldelem t -> oc += ldelem t
@@ -159,10 +166,22 @@ let opcode oc = function
 
     | Ldfld f -> oc += "ldfld "; fieldRef oc f
     | Stfld f -> oc += "stfld "; fieldRef oc f
-    | Callvirt m -> oc += "callvirt "; methodRef oc m
+    | Ldsfld f -> oc += "ldsfld "; fieldRef oc f
+    | Callvirt(tail, m) ->
+        oc += if tail then "tail. callvirt " else "callvirt "
+        methodRef oc m
+
     | Ldftn m -> oc += "ldftn "; methodRef oc m
 
-let custom oc = function
+let opcodes hasTail i oc ops =
+    for op in ops do
+        newline oc i
+        opcode oc op
+    
+let custom oc x =
+    oc += ".custom "
+
+    match x with
     | { ctor = ctor; args = []; namedArgs = [] } -> methodRef oc ctor
 
     // TODO:
@@ -178,7 +197,7 @@ let accessNonNested = function
 // )
 // {
 //     .entrypoint
-//     .locals (
+//     .locals init (
 //         
 //     )
 //     ...
@@ -188,16 +207,12 @@ let methodBody i oc { isEntrypoint = isEntrypoint; locals = locals; opcodes = op
         newline oc i
         oc += ".entrypoint"
 
-    match locals with
-    | [] -> ()
-    | _ ->
+    if not <| List.isEmpty locals then
         newline oc i
-        oc += ".locals "
+        oc += ".locals init "
         args i oc locals
 
-    for op in ops do
-        newline oc i
-        opcode oc op
+    opcodes true i oc ops
 
 let methodDef i oc
     {
@@ -211,13 +226,16 @@ let methodDef i oc
     }
     =
 
+    oc += ".method "
     oc += accessNonNested a
     oc += "hidebysig "
     oc += match c with Instance -> "instance " | Static -> "static "
-    type' oc r
+    resultType oc r
     oc += " "
     name oc n
     args i oc xs
+
+    // 23.1.11[MethodImplAttributes] IL = 0x0000; managed = 0x0000
     // newline oc i
     // oc += "cil managed"
     oc += if isForwardref then " forwardref" else ""
@@ -228,16 +246,17 @@ let methodDef i oc
     oc += "}"
 
 let fieldDef oc { access = a; fieldType = t; name = Id.L n } =
+    oc += ".field "
     oc += accessNonNested a
     type' oc t
     oc += " "
     name oc n
     
 let rec classDecl i oc = function
-    | Custom x -> oc += ".custom "; custom oc x
-    | Method m -> oc += ".method "; methodDef i oc m
-    | Field f -> oc += ".field "; fieldDef oc f
-    | NestedClass c -> oc += ".class "; classDef true i oc c
+    | Custom x -> custom oc x
+    | Method m -> methodDef i oc m
+    | Field f -> fieldDef oc f
+    | NestedClass c -> classDef true i oc c
 
 and classDef nested i oc
     {
@@ -247,6 +266,7 @@ and classDef nested i oc
         body = body
     }
     =
+    oc += ".class "
     if isSealed then oc += "sealed "
     if isBeforefieldinit then oc += "beforefieldinit "
     name oc n
@@ -265,15 +285,15 @@ let makeEntryPoint { name = n; resultType = resultType } =
         locals = []
         opcodes =
         [
-            Call <| Asm.methodRef(Static, resultType, Virtual.topLevelType, MethodName n, [])
+            call(false, Static, resultType, Virtual.topLevelType, MethodName n, [])
             Pop
             Ret
         ]
     }
-    Method {
+    {
         access = Public
         callconv = Static
-        resultType = Void
+        resultType = None
         name = Id.L "Main"
         args = []
         isForwardref = false
@@ -292,10 +312,10 @@ let f oc (Prog(decls, e)) =
     for d in decls do
         classDecl 1 oc d
         newline oc 1
-    classDecl 1 oc <| Method e
+    methodDef 1 oc e
 
     newline oc 1
-    classDecl 1 oc <| makeEntryPoint e
+    methodDef 1 oc <| makeEntryPoint e
 
     newline oc 0
     fprintfn oc "}"

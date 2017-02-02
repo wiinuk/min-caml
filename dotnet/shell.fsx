@@ -1,19 +1,38 @@
 [<AutoOpen>]
-module FsShell
+module Shell
 
 open System
 open System.IO
 
-module fsshell =
+module shell =
     let mutable echo = true
 
 module host =
     let out format = printfn format
 
+type PathSplit =
+    /// root name
+    | Qualifier
+    /// without root name
+    | NoQualifier
+    /// parent directory or root
+    | Parent
+    /// directory or file name
+    | Leaf
+
+type Path =
+    static member Split(path, ?target) =
+        match defaultArg target Parent with
+        | Qualifier -> Path.GetPathRoot path
+        | NoQualifier -> path.[Path.GetDirectoryName(path).Length..]
+        | Parent -> Path.GetDirectoryName path
+        | Leaf -> Path.GetFileName path
+
 module path =
-    let split x = Path.GetDirectoryName x
+    let split x = Path.Split x
     let join x y = Path.Combine(x, y)
     let test p = File.Exists p || Directory.Exists p
+    let changeExtension path newExtension = Path.ChangeExtension(path, newExtension)
 
 module location =
     let get<'a> = Environment.CurrentDirectory
@@ -50,6 +69,11 @@ type Item =
 module item =
     let move source sink = File.Move(source, sink)
     let remove source = Item.Remove source
+
+/// object
+module obj =
+    let foreach f xs = Seq.iter (f >> ignore) xs
+    let select f xs = Seq.map f xs
 
 module private expressionInternal =
     open System.Diagnostics
@@ -115,7 +139,7 @@ module private expressionInternal =
         finally
             if old <> color then Console.ForegroundColor <- old
 
-    let log x = if fsshell.echo then writeText stdout ConsoleColor.Gray x
+    let log x = if shell.echo then writeText stdout ConsoleColor.Gray x
     let logfn format = Printf.ksprintf log format
 
     let start (p: Process) = 
@@ -124,7 +148,7 @@ module private expressionInternal =
 
         p.Start() |> ignore
 
-    let invokeAsyncCore command args returnOut = async {
+    let invokeAsyncCore returnOut command args = async {
         let info =
             ProcessStartInfo(
                 command,
@@ -168,25 +192,45 @@ module private expressionInternal =
 module expression =
     open expressionInternal
 
-    let invokeAsync command = Printf.kprintf <| invokeAsyncCore command
-    let invoke command = Printf.kprintf <| fun args ->
-        invokeAsyncCore command args false
-        |> Async.RunSynchronously
+    let invokeAsync command = invokeAsyncCore true command |> Printf.kprintf
+    let invoke command = 
+        invokeAsyncCore false command
+        >> Async.RunSynchronously
+        |> Printf.kprintf
 
 [<AutoOpen>]
 module Toplevel =
-    let echoOff<'a> = fsshell.echo <- false
-    let echoOn<'a> = fsshell.echo <- true
+    let echoOff<'a> = shell.echo <- false
+    let echoOn<'a> = shell.echo <- true
 
 [<AutoOpen>]
 module DefaultAlias =
+    /// location.set
     let cd p = location.set p
+    /// location.get
     let pwd<'a> = location.get<'a>
+    /// childItem.get
     let gci p = childItem.get p
+    /// expression.invoke
     let exe command args = expression.invoke command args
-    let foreach f xs = Seq.iter (f >> ignore) xs
+    /// obj.foreach
+    let foreach f xs = obj.foreach f xs
+    let select f xs = obj.select f xs
+    /// item.remove
     let del pattern = item.remove pattern
 
 [<AutoOpen>]
+module ShellOperators =
+    let join separator xs = String.concat separator xs
+    let f format = sprintf format
+
+module ExtraOperators =
+    /// path.join
+    let (/) l r = path.join l r
+    /// obj.foreach
+    let (%) xs f = foreach f xs
+
+[<AutoOpen>]
 module ExternalPath =
+    /// env:...
     let env x = Environment.GetEnvironmentVariable x

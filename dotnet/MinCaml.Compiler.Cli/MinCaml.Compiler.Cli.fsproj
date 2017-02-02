@@ -68,6 +68,9 @@
     <Compile Include="..\emit.fs">
       <Link>emit.fs</Link>
     </Compile>
+    <None Include="..\libmincaml.il">
+      <Link>libmincaml.il</Link>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Reference Include="FSharp.Compatibility.OCaml">
@@ -94,8 +97,6 @@
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Numerics" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\..\MinCaml.Compiler.Ast.fsproj">
       <Name>MinCaml.Compiler.Ast</Name>
       <Project>{3d7efd39-b8de-48b7-9e3b-9c1cc1449336}</Project>

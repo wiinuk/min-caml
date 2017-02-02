@@ -25,14 +25,20 @@ let string s = lexbuf stdout (Lexing.from_string s) (* 文字列をコンパイ�
 
 let file f = (* ファイルをコンパイルしてファイルに出力する (caml2html: main_file) *)
   let inchan = open_in (f ^ ".ml") in
-  let outchan = open_out (f ^ ".s") in
+  let outchan = open_out (f ^ ".il") in
   try
     lexbuf outchan (Lexing.from_channel inchan);
     close_in inchan;
     close_out outchan;
   with e -> (close_in inchan; close_out outchan; raise e)
 
+(*F#
+[<EntryPoint>]
+do
+F#*)
+(*IF-OCAML*)
 let () = (* ここからコンパイラの実行が開始される (caml2html: main_entry) *)
+(*ENDIF-OCAML*)
   let files = ref [] in
   Arg.parse
     [("-inline", Arg.Int(fun i -> Inline.threshold := i), "maximum size of functions inlined");

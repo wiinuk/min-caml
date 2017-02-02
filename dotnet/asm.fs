@@ -8,7 +8,6 @@ type cli_type =
     /// e.g. !1
     | TypeArgmentIndex of int
 
-    | Void
     /// sizeof<bool> = 1
     | Bool
     | Int32
@@ -24,7 +23,7 @@ let tupleType types =
     let arity = List.length types
     TypeName(Class, ["mscorlib"], ["System"], [], sprintf "Tuple`%d" arity, types)
 
-let unitType = TypeName(Class, ["mscorlib"], ["System"], [], sprintf "DBNull", [])
+let unitType = TypeName(Class, ["mscorlib"], ["System"], [], "DBNull", [])
 
 let rec cliType = function
     | Type.Array t -> Array <| cliType t
@@ -50,7 +49,7 @@ type method_name =
 
 type method_ref = {
     call_conv: call_conv
-    resultType: cli_type
+    resultType: cli_type option
     declaringType: cli_type
     methodName: method_name
     argTypes: cli_type list
@@ -83,10 +82,11 @@ and exp =
     | Mul
     | Div
 
+    | Br of Id.l
     | Beq of Id.l
     | Ble of Id.l
 
-    | Call of method_ref
+    | Call of isTail: bool * method_ref
     | Ret
 
     | Ldelem of Type.t
@@ -96,9 +96,10 @@ and exp =
     | Newobj of declaringType: cli_type * argTypes: cli_type list
     | Ldfld of field_ref
     | Stfld of field_ref
+    | Ldsfld of field_ref
 
     /// callvirt instance $resultType $declaringType::$methodName($argTypes)
-    | Callvirt of method_ref
+    | Callvirt of isTail: bool * method_ref
     | Ldftn of method_ref
 
 let methodRef(call_conv, resultType, declaringType, methodName, argTypes) = {
@@ -111,21 +112,24 @@ let methodRef(call_conv, resultType, declaringType, methodName, argTypes) = {
 let ldftn(resultType, declaringType, name, argTypes) =
     Ldftn <| methodRef(Instance, resultType, declaringType, MethodName <| Id.L name, argTypes)
 
-let callvirt(resultType, declaringType, name, argTypes) =
-    Callvirt <| methodRef(Instance, resultType, declaringType, MethodName <| Id.L name, argTypes)
+let call(tail, callconv, resultType, declaringType, name, argTypes) =
+    Call(tail, methodRef(callconv, resultType, declaringType, name, argTypes))
+
+let callvirt(tail, resultType, declaringType, name, argTypes) =
+    Callvirt(tail, methodRef(Instance, resultType, declaringType, MethodName <| Id.L name, argTypes))
 
 type accesibility = Public | Default
 type method_body = {
     isEntrypoint: bool
 
-    /// .locals (...)
+    /// .locals init (...)
     locals: (Id.t * Type.t) list
     opcodes: t
 }
 type method_def = {
     access: accesibility
     callconv: call_conv
-    resultType: cli_type
+    resultType: cli_type option
     name: Id.l
     args: (Id.t * Type.t) list
     isForwardref: bool

@@ -43,59 +43,19 @@ let string s =
     w.GetStringBuilder().ToString()
 
 let ilsource = string """
-let rec add a b = a + b in
-let rec add3 a b c = a + b + c in
-()
+let rec f x = if x = 0 then x else f (x - 1) in
+print_int (f 10)
 """
 
-let ilsource = string "print_int 10"
+let ilsource = string """
+let rec ack x y =
+  if x <= 0 then y + 1 else
+  if y <= 0 then ack (x - 1) 1 else
+  ack (x - 1) (ack x (y - 1)) in
+print_int (ack 3 10)
+"""
+
+#r "bin/Debug/compiler.test.dll"
+Test.testOnce "test/ack.ml" |> Async.RunSynchronously
 
 File.WriteAllText(Path.Combine(__SOURCE_DIRECTORY__, "test.il"), ilsource)
-
-#r "test.exe"
-MinCamlModule.Main()
-
-open Id
-open Closure
-open Type
-
-Prog(
-    [
-    {
-        name = L"f.4", Fun([Int], Int)
-        args = ["x.5", Int]
-        formal_fv = ["a.3", Int]
-        body =
-            Let(
-                ("Ti1.6", Int),
-                Add("x.5", "a.3"),
-                AppCls("f.4", ["Ti1.6"])
-            )
-    }
-    {
-        name = L"add.2", Fun([Int], Fun([Int], Int))
-        args = ["a.3", Int]
-        formal_fv = []
-        body =
-            MakeCls(
-                ("f.4", Fun([Int], Int)),
-                {
-                    entry = L"f.4"
-                    actual_fv = ["a.3"]
-                },
-                Closure.Var "f.4"
-            )
-    }
-    ],
-    Closure.Unit
-)
-
-string """
-let x = xs.(0) in
-()
-"""
-
-
-#load "../fsshell.fsx"
-let (/) = path.join
-exe (__SOURCE_DIRECTORY__/"../dotnet/min-caml/bin/debug/min-caml.exe") "testtest"
