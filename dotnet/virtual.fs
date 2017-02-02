@@ -35,10 +35,10 @@ let ld { vars = env } id acc =
     match location with
     | Local -> acc++Ldloc id
     | Arg -> acc++Ldarg id
-    | This -> acc++Ldloc_0
+    | This -> acc++Ldarg_0
     | InstanceField ->
         acc
-        ++Ldloc_0
+        ++Ldarg_0
         ++Ldfld { fieldType = cliType t; declaringType = cli_type.This; name = Id.L id }
 
 let many xs f acc = List.fold f acc xs
@@ -206,7 +206,7 @@ let rec g ({ isTail = isTail; locals = locals; vars = vars } as env) acc = funct
 
         acc
         +>g_loadMany ys env
-        ++Call(isTail && x = env.methodName, methodRef(Static, Some resultType, topLevelType, MethodName x, argTypes))
+        ++Call(isTail && x = env.methodName, methodRef(Static, Some resultType, topLevelType, x, argTypes))
         +>addRet isTail
 
     // 組の生成 (caml2html: virtual_tuple)
@@ -247,7 +247,7 @@ let rec g ({ isTail = isTail; locals = locals; vars = vars } as env) acc = funct
             let methodName = sprintf "get_Item%d" <| i + 1
             acc
             ++Dup
-            ++Call(false, methodRef(Instance, Some <| TypeArgmentIndex i, tupleType, MethodName(Id.L methodName), []))
+            ++Call(false, methodRef(Instance, Some <| TypeArgmentIndex i, tupleType, Id.L methodName, []))
             ++Stloc x
         )
 
@@ -325,6 +325,18 @@ and g_branchRelation ({ vars = vars; isTail = isTail } as env) acc op (x, y, e1,
 
     | _ -> failwith "operation supported only for bool, int, and float"
 
+let ctorDef(access, args, isForwardref, body) = {
+    access = access
+    isSpecialname = true
+    isRtspecialname = true
+    callconv = Instance
+    resultType = None
+    name = Ctor
+    args = args
+    isForwardref = isForwardref
+    body = body
+}
+
 let methodDef access callconv resultType (Id.L name' as name) args formalFvs isEntrypoint e =
     let funcType = Type.Fun(List.map snd args, resultType)
 
@@ -341,9 +353,11 @@ let methodDef access callconv resultType (Id.L name' as name) args formalFvs isE
     }
     {
         access = access
+        isSpecialname = false
+        isRtspecialname = false
         callconv = callconv
         resultType = Some <| cliType resultType
-        name = name
+        name = MethodName name
         args = args
         isForwardref = false
         body = body
@@ -368,6 +382,27 @@ let h_method { Closure.name = x, t; Closure.args = yts; Closure.body = e } =
     let resultType = match t with Type.Fun(_, t) -> t | _ -> assert_false()
     methodDef Public Static resultType x yts [] false e
 
+
+let compilerGeneratedAttributeType = TypeName(type_kind.Class, ["mscorlib"], ["System";"Runtime";"CompilerServices"], [], "CompilerGeneratedAttribute", [])
+let compilerGenerated = {
+    ctor = ctorRef(compilerGeneratedAttributeType, [])
+    args = []
+    namedArgs = []
+}
+
+let defaultCtor =
+    let body = {
+        isEntrypoint = false
+        locals = []
+        opcodes =
+        [
+            Ldarg_0
+            Call(false, ctorRef(Object, []))
+            Ret
+        ]
+    }
+    ctorDef(Public, [], false, body)
+
 // .class sealed beforefieldinit $x
 // {
 //     .custom instance void [mscorlib]System.Runtime.CompilerServices.CompilerGeneratedAttribute::.ctor()
@@ -391,15 +426,15 @@ let h_method { Closure.name = x, t; Closure.args = yts; Closure.body = e } =
 //        )
 //        $e
 //    }
+//
+//    .method public hidebysig specialname rtspecialname instance void .ctor()
+//    cil managed 
+//    {
+//      ldarg.0
+//      call instance void System.Object::.ctor()
+//      ret
+//    }
 // }
-
-let compilerGeneratedAttributeType = TypeName(type_kind.Class, ["mscorlib"], ["System";"Runtime";"CompilerServices"], [], "CompilerGeneratedAttribute", [])
-let compilerGenerated = {
-    ctor = methodRef(Instance, None, compilerGeneratedAttributeType, Ctor, [])
-    args = []
-    namedArgs = []
-}
-
 let h_closureClass { Closure.name = x, t; Closure.args = yts; Closure.formal_fv = zts; Closure.body = e } =
     let funcType = cliType t
     let resultType = match t with Type.Fun(_, t) -> t | _ -> assert_false()
@@ -407,8 +442,11 @@ let h_closureClass { Closure.name = x, t; Closure.args = yts; Closure.formal_fv 
         []
         ++Custom compilerGenerated
         ++Field { access = Public; fieldType = funcType; name = x }
-        +>many zts (fun acc (z, y) -> Field { access = Public; fieldType = cliType y; name = Id.L z }::acc)
-        ++Method (methodDef Public Instance resultType (Id.L "Invoke") yts zts false e)
+        +>many zts (fun acc (z, y) ->
+            Field { access = Public; fieldType = cliType y; name = Id.L z }::acc
+        )
+        ++Method(methodDef Public Instance resultType (Id.L "Invoke") yts zts false e)
+        ++Method defaultCtor
     {
         isSealed = true
         isBeforefieldinit = true

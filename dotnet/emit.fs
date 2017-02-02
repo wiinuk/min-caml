@@ -27,17 +27,19 @@ let group first emit sep last o xs = groupCore false first emit sep last o xs
 
 // TODO: エスケープ処理
 let name oc = function
-| "" -> oc += "''"
-| x ->
-    let isIdentifier =
-        String.forall (fun c ->
-            ('a' <= c && c <= 'z') ||
-            ('A' <= c && c <= 'Z') ||
-            c = '_' ||
-            ('0' <= c && c <= '9')
-        ) x
+    | "" -> oc += "''"
+    | x ->
 
-    if isIdentifier then oc += x
+    let inRange (lo, hi) x = lo <= x && x <= hi
+
+    let isIdStart = function
+        | '_' | '`' -> true
+        | c -> inRange ('a', 'z') c || inRange ('A', 'Z') c
+
+    let isIdContinue c = isIdStart c || inRange ('0', '9') c
+    let rec isIdTail i = x.Length <= i || (isIdContinue x.[i] && isIdTail (i + 1))
+
+    if isIdStart x.[0] && isIdTail 1 then oc += x
     else fprintf oc "'%s'" x
 
 let rec type' oc = function
@@ -137,7 +139,7 @@ let opcode oc = function
     | Sub -> oc += "sub"
     | Mul -> oc += "mul"
     | Div -> oc += "div"
-    | Ldloc_0 -> oc += "ldloc.0"
+    | Ldarg_0 -> oc += "ldarg.0"
     | Ldnull -> oc += "ldnull"
     | Ldc_I4 x -> ldc_i4 oc x
     | Ldc_R8 x -> ldc_r8 oc x
@@ -216,29 +218,33 @@ let methodBody i oc { isEntrypoint = isEntrypoint; locals = locals; opcodes = op
 
 let methodDef i oc
     {
-        access = a
-        callconv = c
+        access = access
+        isSpecialname = isSpecialname
+        isRtspecialname = isRtspecialname
+        callconv = callconv
         resultType = r
-        name = Id.L n
+        name = name
         args = xs
         isForwardref = isForwardref
         body = body
     }
     =
-
     oc += ".method "
-    oc += accessNonNested a
+    oc += accessNonNested access
     oc += "hidebysig "
-    oc += match c with Instance -> "instance " | Static -> "static "
+    if isSpecialname then oc += "specialname "
+    if isRtspecialname then oc += "rtspecialname "
+    oc += match callconv with Instance -> "instance " | Static -> "static "
     resultType oc r
     oc += " "
-    name oc n
+    methodName oc name
     args i oc xs
 
     // 23.1.11[MethodImplAttributes] IL = 0x0000; managed = 0x0000
     // newline oc i
     // oc += "cil managed"
     oc += if isForwardref then " forwardref" else ""
+
     newline oc i
     oc += "{"
     methodBody (i + 1) oc body
@@ -251,7 +257,7 @@ let fieldDef oc { access = a; fieldType = t; name = Id.L n } =
     type' oc t
     oc += " "
     name oc n
-    
+
 let rec classDecl i oc = function
     | Custom x -> custom oc x
     | Method m -> methodDef i oc m
@@ -263,21 +269,17 @@ and classDef nested i oc
         isSealed = isSealed
         isBeforefieldinit = isBeforefieldinit
         name = Id.L n
-        body = body
+        body = decls
     }
     =
     oc += ".class "
+    if nested then oc += "nested private "
     if isSealed then oc += "sealed "
     if isBeforefieldinit then oc += "beforefieldinit "
     name oc n
-    newline oc i
-    oc += "{"
-    newline oc (i + 1)
-    for d in body do
-        classDecl (i + 1) oc d
-        newline oc i
-    newline oc i
-    oc += "}"
+    newline oc i; oc += "{"
+    for decl in decls do (newline oc (i + 1); classDecl (i + 1) oc decl)
+    newline oc i; oc += "}"
 
 let makeEntryPoint { name = n; resultType = resultType } =
     let body = {
@@ -285,16 +287,24 @@ let makeEntryPoint { name = n; resultType = resultType } =
         locals = []
         opcodes =
         [
-            call(false, Static, resultType, Virtual.topLevelType, MethodName n, [])
+            Call(false, {
+                call_conv = Static
+                resultType = resultType
+                declaringType = Virtual.topLevelType
+                methodName = n
+                argTypes = []
+            })
             Pop
             Ret
         ]
     }
     {
         access = Public
+        isSpecialname = false
+        isRtspecialname = false
         callconv = Static
         resultType = None
-        name = Id.L "Main"
+        name = MethodName <| Id.L "Main"
         args = []
         isForwardref = false
         body = body

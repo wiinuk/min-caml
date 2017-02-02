@@ -2,8 +2,6 @@
 open ExtraOperators
 open Xunit
 
-__SOURCE_DIRECTORY__/".." |> cd
-
 let libMinCamlIL = "dotnet/libmincaml.il"
 let ocamlCompatibilityDLL = "packages/FSharp.Compatibility.OCaml.0.2.0/lib/net40/FSharp.Compatibility.OCaml.dll"
 let ocamlCompatibilityFS = "ocaml.compatibility.fs"
@@ -79,7 +77,7 @@ let fsharpc = env"ProgramFiles"/"Microsoft SDKs/F#/4.0/Framework/v4.0/fsc.exe"
 
 let (@.) = path.changeExtension
 
-let testOnce sourceML = async {
+let testOnce removeTempFiles sourceML = async {
     let sourceIL = sourceML@."il"
     let output = sourceML@."ml.exe"
     let outputFS = sourceML@."fs.exe"
@@ -96,13 +94,17 @@ let testOnce sourceML = async {
         Assert.Equal(resultFS, resultMC)
 
     finally
-        item.remove sourceIL
-        item.remove output
-        item.remove outputFS
+        if removeTempFiles then
+            item.remove sourceIL
+            item.remove output
+            item.remove outputFS
 }
 
-
-let sources() = gci "test/*.ml" |> select string
+let sources() =
+    __SOURCE_DIRECTORY__/".." |> cd
+    gci "test/*.ml" |> select (fun x -> [|x.Name|])
 
 [<Theory; MemberData "sources">]
-let test sourceML = testOnce sourceML |> Async.StartAsTask
+let test sourceML =
+    __SOURCE_DIRECTORY__/".." |> cd
+    "test"/sourceML |> testOnce true |> Async.StartAsTask

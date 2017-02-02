@@ -6,6 +6,9 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "MinCaml.Compiler.Ast", "MinCaml.Compiler.Ast.fsproj", "{3D7EFD39-B8DE-48B7-9E3B-9C1CC1449336}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "MinCaml.Compiler.Test", "test\MinCaml.Compiler.Test.fsproj", "{8EFD15A5-9842-4CC1-9416-B7FB22614C60}"
+	ProjectSection(ProjectDependencies) = postProject
+		{190770AD-DB4E-42DA-9D71-5B5370A4AFB7} = {190770AD-DB4E-42DA-9D71-5B5370A4AFB7}
+	EndProjectSection
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "min-caml", "dotnet\min-caml\min-caml.fsproj", "{190770AD-DB4E-42DA-9D71-5B5370A4AFB7}"
 EndProject

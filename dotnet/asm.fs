@@ -65,7 +65,7 @@ type t = exp list
 and exp =
     | Label of Id.l
 
-    | Ldloc_0
+    | Ldarg_0
     | Ldarg of Id.t
     | Ldloc of Id.t
     | Stloc of Id.t
@@ -106,17 +106,24 @@ let methodRef(call_conv, resultType, declaringType, methodName, argTypes) = {
     call_conv = call_conv
     resultType = resultType
     declaringType = declaringType
-    methodName = methodName
+    methodName = MethodName methodName
+    argTypes = argTypes
+}
+let ctorRef(declaringType, argTypes) = {
+    call_conv = Instance
+    resultType = None
+    declaringType = declaringType
+    methodName = Ctor
     argTypes = argTypes
 }
 let ldftn(resultType, declaringType, name, argTypes) =
-    Ldftn <| methodRef(Instance, resultType, declaringType, MethodName <| Id.L name, argTypes)
+    Ldftn <| methodRef(Instance, resultType, declaringType, Id.L name, argTypes)
 
 let call(tail, callconv, resultType, declaringType, name, argTypes) =
     Call(tail, methodRef(callconv, resultType, declaringType, name, argTypes))
 
 let callvirt(tail, resultType, declaringType, name, argTypes) =
-    Callvirt(tail, methodRef(Instance, resultType, declaringType, MethodName <| Id.L name, argTypes))
+    Callvirt(tail, methodRef(Instance, resultType, declaringType, Id.L name, argTypes))
 
 type accesibility = Public | Default
 type method_body = {
@@ -126,11 +133,15 @@ type method_body = {
     locals: (Id.t * Type.t) list
     opcodes: t
 }
+
 type method_def = {
     access: accesibility
+    isSpecialname: bool
+    isRtspecialname: bool
     callconv: call_conv
+    /// None = void
     resultType: cli_type option
-    name: Id.l
+    name: method_name
     args: (Id.t * Type.t) list
     isForwardref: bool
     body: method_body
