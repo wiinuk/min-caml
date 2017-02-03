@@ -64,20 +64,9 @@ let ld { vars = env } id acc =
         ++Ldftn(methodRef(Static, Some resultType, topLevelType, Id.L id, [], argTypes))
         ++Newobj(funcType, [Object; NativeInt])
 
-let many xs f acc = List.fold f acc xs
+let many xs f acc = List.fold (fun acc x -> f x acc) acc xs
 
 let addRet isTail acc = if isTail then acc++Ret else acc
-
-(*
-do
-    Ti3.4 : int =
-        Ti1.5 : int =
-            10
-        Ti2.6 : int =
-            20
-        Ti1.5 + Ti2.6
-    (min_caml_print_int : (int) -> ())(Ti3.4)
-*)
 
 let (|Binary|_|) = function
     | Closure.Add(x, y)
@@ -98,7 +87,7 @@ let (|Conditional|_|) = function
     | Closure.IfLE(x, y, e1, e2) -> Some(Bgt, x, y, e1, e2)
     | _ -> None
 
-let notContains k1 k2 e1 e2 =
+let notContains2 k1 k2 e1 e2 =
     let xs1 = Closure.fv e1
     not (Set.contains k1 xs1) &&
     not (Set.contains k2 xs1) &&
@@ -107,6 +96,26 @@ let notContains k1 k2 e1 e2 =
     not (Set.contains k1 xs2) &&
     not (Set.contains k2 xs2)
 
+let notContains k e = not (Set.contains k (Closure.fv e))
+
+let takeLets1 defaultV (|Sentinel|) = function
+    | Closure.Let((x, _), e, k) ->
+        let rec take xs es = function
+            | Closure.Let((x, _), e, k) when List.forall (fun x -> notContains x e) xs ->
+                take (x::xs) (e::es) k
+
+            | Sentinel xs es x -> x
+
+        take [x] [e] k
+
+    | _ -> defaultV
+
+let (|AppDir|AppCls|NoApp|) x =
+    takeLets1 NoApp (fun xs es -> function
+        | Closure.AppDir(f, xs') when List.rev xs = xs' -> AppDir(f, es)
+        | Closure.AppCls(f, xs') when List.rev xs = xs' -> AppCls(f, es)
+        | _ -> NoApp
+    ) x
 
 /// 式の仮想マシンコード生成 (caml2html: virtual_g)
 let rec g ({ isTail = isTail; locals = locals; vars = vars } as env) x acc =
@@ -121,30 +130,67 @@ let rec g ({ isTail = isTail; locals = locals; vars = vars } as env) x acc =
     | Closure.Var x -> acc+>ld env x+>addRet isTail
 
     // $x1 = $e1
-    // $x2 = $e2
-    // $x1 $op $x2
-    | Closure.Let((x1, _), e1, Closure.Let((x2, _), e2, Binary(op, x1', x2'))) when x1 = x1' && x2 = x2' ->
-        let env = { env with isTail = false }
-        acc+>g env e1+>g env e2++op
-
-    // $x1 = $e1
-    // $op $x1
+    // $op $x1' // x1 = x1'
     | Closure.Let((x1, _), e1, Unary(op, x1')) when x1 = x1' ->
         let env = { env with isTail = false }
         acc+>g env e1++op
 
     // $x1 = $e1
-    // $x2 = $e2
-    // if $x1 $op $x2 then
-    //     $ifTrue
+    // $x2 = $e2 // e2 の中に x1 を含まない
+    // $x1' $op $x2' // x1 = x1' && x2 = x2'
+    | Closure.Let((x1, _), e1, Closure.Let((x2, _), e2, Binary(op, x1', x2')))
+        when x1 = x1' && x2 = x2' && notContains x1 e2
+        ->
+
+        let env = { env with isTail = false }
+        acc+>g env e1+>g env e2++op
+
+    // $x1 = $e1
+    // $x2 = $e2 // e2 の中に x1 を含まない
+    // if $x1' $op $x2' then // x1 = x1' && x2 = x2'
+    //     $ifTrue // ifTrue の中に x1 と x2 を含まない
     // else
-    //     $iffalse
-    | Closure.Let((x1, _), e1, Closure.Let((x2, _), e2, Conditional((op, x1', x2', ifTrue, ifFalse) as c))) when x1 = x1' && x2 = x2' && notContains x1 x2 ifTrue ifFalse ->
+    //     $ifFalse // ifFalse の中に x1 と x2 を含まない
+    | Closure.Let((x1, _), e1, Closure.Let((x2, _), e2, Conditional((op, x1', x2', ifTrue, ifFalse) as c)))
+        when x1 = x1' && x2 = x2' && notContains x1 e2 && notContains2 x1 x2 ifTrue ifFalse
+        ->
+
         let env' = { env with isTail = false }
         acc+>g env' e1+>g env' e2+>g_branchRelationTail env (op, e1, e2)
 
-    // TODO: Syntax.App, Syntax.Tuple, Syntax.LetTuple, Syntax.Array, Syntax.Get, Syntax.Put
-    | Closure.Let _ -> ()
+    // $x1 = $e1
+    // $x2 = $e2 // e2 の中に x1 を含まない
+    // $x3 = $e3 // e3 の中に x1 と x2 を含まない
+    // ︙
+    // 
+    // $f($x1', $x2', $x3', …) // x1 = x1' && x2 = x2' && x3 = x3' && …
+    | AppDir((x, t), es) ->
+        let argTypes, resultType = getCliFunctionElements t
+
+        acc
+        +>many es (g { env with isTail = false })
+        ++Call(isTail && x = env.methodName, methodRef(Static, Some resultType, topLevelType, x, [], argTypes))
+        +>addRet isTail
+
+    | AppCls(x, es) ->
+        let closureType = M.find x vars |> fst
+        let argLendth = getFunctionElements closureType |> fst |> List.length
+
+        acc
+        +>ld env x
+        +>many es (g { env with isTail = false })
+        ++callvirt(
+            false,
+            Some <| TypeArgmentIndex argLendth,
+            cliType closureType,
+            "Invoke",
+            List.init argLendth TypeArgmentIndex
+        )
+        +>addRet isTail
+
+    // TODO: Syntax.Tuple, Syntax.LetTuple, Syntax.Array, Syntax.Get, Syntax.Put
+    | Closure.Tuple xs ->
+        takeLets1 [] (function )
 
     // $e1
     // stloc $x
@@ -177,7 +223,7 @@ let rec g ({ isTail = isTail; locals = locals; vars = vars } as env) x acc =
             ++Stloc x
 
         locals := Map.add x t !locals
-        g { env with vars = Map.add x (t, Local) vars } acc e2
+        g { env with vars = Map.add x (t, Local) vars } e2 acc
 
     // TODO: デリゲートをキャッシュして使いまわす
     // インスタンスメソッドから Func<…> を作成
@@ -248,10 +294,11 @@ let rec g ({ isTail = isTail; locals = locals; vars = vars } as env) x acc =
         let argTypes, resultType = getCliFunctionElements t
         let funcType = funType argTypes resultType
         let closuleType = localTypeToCliType l
+
         let acc =
             acc
             ++Newobj(closuleType, [])
-            +>many ys (fun acc y ->
+            +>many ys (fun y acc ->
                 let yt, _ = Map.find y vars
                 acc
                 ++Dup
@@ -274,7 +321,7 @@ let rec g ({ isTail = isTail; locals = locals; vars = vars } as env) x acc =
             }
 
         locals := Map.add x t !locals
-        g { env with vars = Map.add x (t, Local) vars } acc e2
+        g { env with vars = Map.add x (t, Local) vars } e2 acc
 
     // $(ld x)
     // $(ld ys.[0])
@@ -354,7 +401,7 @@ let rec g ({ isTail = isTail; locals = locals; vars = vars } as env) x acc =
 
         acc+>
         ld env y+>
-        many (List.indexed xts) (fun acc (i, (x, t)) ->
+        many (List.indexed xts) (fun (i, (x, t)) acc ->
             if not <| Set.contains x s then acc else
 
             locals := Map.add x t !locals
@@ -399,9 +446,9 @@ let rec g ({ isTail = isTail; locals = locals; vars = vars } as env) x acc =
         let n = Id.L <| "min_caml_" + x
         acc++Ldsfld { fieldType = Array(cliType et); declaringType = topLevelType; name = n }
 
-    | x -> failwith "unknown expression %A" x
+    | x -> failwithf "unknown expression %A" x
 
-and g_loadMany xs env acc = many xs (fun acc x -> ld env x acc) acc
+and g_loadMany xs env acc = many xs (ld env) acc
 and g_branchRelationTail ({ isTail = isTail } as env) (op, e1, e2) acc =
     let ifTrue = Id.L <| Id.genid "iftrue"
     let acc = acc++op ifTrue+>g env e2
@@ -465,11 +512,11 @@ let methodDef access callconv resultType (Id.L name' as name) args formalFvs isE
         Map.add name' (funcType, location) env
 
     let locals = ref Map.empty
-    let opcodes = g { vars = env; isTail = true; locals = locals; methodName = name } [] e
+    let opcodes = g { vars = env; isTail = true; locals = locals; methodName = name } e [] |> List.rev
     let body = {
         isEntrypoint = isEntrypoint
         locals = !locals
-        opcodes = List.rev opcodes
+        opcodes = opcodes
     }
     {
         access = access
@@ -542,8 +589,8 @@ let closureClass { Closure.name = x, t; Closure.args = yts; Closure.formal_fv = 
         []
         ++Custom compilerGenerated
         ++Field { access = Public; fieldType = funcType; name = x }
-        +>many zts (fun acc (z, y) ->
-            Field { access = Public; fieldType = cliType y; name = Id.L z }::acc
+        +>many zts (fun (z, y) acc ->
+            acc++Field { access = Public; fieldType = cliType y; name = Id.L z }
         )
         ++Method(methodDef Public Instance resultType (Id.L "Invoke") yts zts false e)
         ++Method defaultCtor

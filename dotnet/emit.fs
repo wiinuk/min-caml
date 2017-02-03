@@ -211,10 +211,10 @@ let methodBody i oc { isEntrypoint = isEntrypoint; locals = locals; opcodes = op
         newline oc i
         oc += ".entrypoint"
 
-    if not <| List.isEmpty locals then
+    if not <| Map.isEmpty locals then
         newline oc i
         oc += ".locals init "
-        args i oc locals
+        args i oc <| Map.toList locals
 
     opcodes true i oc ops
 
@@ -286,7 +286,7 @@ and classDef nested i oc
 let makeEntryPoint { name = n; resultType = resultType } =
     let body = {
         isEntrypoint = true
-        locals = []
+        locals = Map.empty
         opcodes =
         [
             Call(false, {
