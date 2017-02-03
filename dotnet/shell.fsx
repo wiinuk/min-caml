@@ -40,12 +40,10 @@ module location =
 
 module childItem =
     let get p =
-        let p =
-            if Path.IsPathRooted p
-            then Path.GetDirectoryName p, Path.GetFileName p
-            else location.get, p
-        p
-        |> Directory.EnumerateFileSystemEntries
+        let parent, name = Path.GetDirectoryName p, Path.GetFileName p
+        let parent = if parent = "" then "." else parent
+        
+        Directory.EnumerateFileSystemEntries(parent, name)
         |> Seq.map (function
             | p when File.Exists p -> FileInfo p :> FileSystemInfo
             | p -> DirectoryInfo p :> _

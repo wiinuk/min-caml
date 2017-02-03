@@ -57,7 +57,9 @@ print_int (ack 3 10)
 
 #r "bin/Debug/MinCaml.Compiler.Test.dll"
 open ExtraOperators
-cd <| __SOURCE_DIRECTORY__/".."
-Test.testOnce false "test/adder.ml" |> Async.RunSynchronously
+cd <| __SOURCE_DIRECTORY__/"bin/debug"
+pwd
+Test.testOnce "ack" |> Async.RunSynchronously
+Test.testOnce "adder" |> Async.RunSynchronously
 
 File.WriteAllText(Path.Combine(__SOURCE_DIRECTORY__, "test.il"), ilsource)

@@ -61,51 +61,15 @@
     <Error Condition="!Exists('..\packages\xunit.runner.visualstudio.2.1.0\build\net20\xunit.runner.visualstudio.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\xunit.runner.visualstudio.2.1.0\build\net20\xunit.runner.visualstudio.props'))" />
   </Target>
   <ItemGroup>
-    <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="..\ocaml.compatibility.fs">
-      <Link>ocaml.compatibility.fs</Link>
-    </Compile>
-    <Compile Include="ack.ml" />
-    <Compile Include="adder.ml" />
-    <Compile Include="cls-bug.ml" />
-    <Compile Include="cls-bug2.ml" />
-    <Compile Include="cls-rec.ml" />
-    <Compile Include="cls-reg-bug.ml" />
-    <Compile Include="even-odd.ml" />
-    <Compile Include="fib.ml" />
-    <Compile Include="float.ml" />
-    <Compile Include="funcomp.ml" />
-    <Compile Include="gcd.ml" />
-    <Compile Include="inprod.ml" />
-    <Compile Include="inprod-loop.ml" />
-    <Compile Include="inprod-rec.ml" />
-    <Compile Include="join-reg.ml" />
-    <Compile Include="join-reg2.ml" />
-    <Compile Include="join-stack.ml" />
-    <Compile Include="join-stack2.ml" />
-    <Compile Include="join-stack3.ml" />
-    <Compile Include="matmul.ml" />
-    <Compile Include="matmul-flat.ml" />
-    <Compile Include="non-tail-if.ml" />
-    <Compile Include="non-tail-if2.ml" />
-    <Compile Include="print.ml" />
-    <Compile Include="shuffle.ml" />
-    <Compile Include="spill.ml" />
-    <Compile Include="spill2.ml" />
-    <Compile Include="spill3.ml" />
-    <Compile Include="sum.ml" />
-    <Compile Include="sum-tail.ml" />
     <Content Include="packages.config" />
-    <None Include="palette.fsx" />
+    <Compile Include="AssemblyInfo.fs" />
     <Compile Include="..\dotnet\shell.fsx">
       <Link>shell.fsx</Link>
     </Compile>
     <Compile Include="..\dotnet\Test.fs">
       <Link>Test.fs</Link>
     </Compile>
-    <None Include="..\dotnet\run-test.fsx">
-      <Link>run-test.fsx</Link>
-    </None>
+    <None Include="palette.fsx" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="FSharp.Compatibility.OCaml">

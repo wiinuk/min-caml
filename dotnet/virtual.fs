@@ -461,10 +461,7 @@ let h = function
 
 /// プログラム全体の仮想マシンコード生成 (caml2html: virtual_f)
 let f (Closure.Prog(fundefs, e)) =
-
-
     let fundefs = List.map h fundefs
-
     Prog(
         fundefs,
         methodDef Public Static Type.Unit entrypointName [] [] false e

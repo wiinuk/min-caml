@@ -79,32 +79,34 @@ let (@.) = path.changeExtension
 
 let testOnce removeTempFiles sourceML = async {
     let sourceIL = sourceML@."il"
-    let output = sourceML@."ml.exe"
-    let outputFS = sourceML@."fs.exe"
+    let binaryML = sourceML@."ml.exe"
+    let binaryFS = sourceML@."fs.exe"
     try
         exe mincaml "%s" (sourceML@.null) |> ignore
-        exe "ilasm" """-nologo -exe -output="%s" "%s" %s""" output libMinCamlIL sourceIL |> ignore
+        exe "ilasm" """-nologo -exe -output="%s" "%s" %s""" binaryML libMinCamlIL sourceIL |> ignore
         exe fsharpc """--nologo --mlcompatibility --standalone -o:"%s" -r:"%s" "%s" "%s" """
-            outputFS ocamlCompatibilityDLL ocamlCompatibilityFS sourceML
+            binaryFS ocamlCompatibilityDLL ocamlCompatibilityFS sourceML
             |> ignore
 
-        let! resultFS = expression.invokeAsync outputFS ""
-        let! resultMC = expression.invokeAsync output ""
+        let! resultFS = expression.invokeAsync binaryFS ""
+        let! resultMC = expression.invokeAsync binaryML ""
 
         Assert.Equal(resultFS, resultMC)
 
     finally
         if removeTempFiles then
             item.remove sourceIL
-            item.remove output
-            item.remove outputFS
+            item.remove binaryML
+            item.remove binaryFS
 }
 
+let solutionRoot = pwd/"../../.."
+
 let sources() =
-    __SOURCE_DIRECTORY__/".." |> cd
+    cd solutionRoot
     gci "test/*.ml" |> select (fun x -> [|x.Name|])
 
 [<Theory; MemberData "sources">]
 let test sourceML =
-    __SOURCE_DIRECTORY__/".." |> cd
+    cd solutionRoot
     "test"/sourceML |> testOnce true |> Async.StartAsTask
