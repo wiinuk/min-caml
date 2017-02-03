@@ -81,6 +81,10 @@ let testOnce removeTempFiles sourceML = async {
     let sourceIL = sourceML@."il"
     let binaryML = sourceML@."ml.exe"
     let binaryFS = sourceML@."fs.exe"
+    let tempFiles = [sourceIL; binaryML; binaryFS]
+
+    tempFiles % item.remove
+
     try
         exe mincaml "%s" (sourceML@.null) |> ignore
         exe "ilasm" """-nologo -exe -output="%s" "%s" %s""" binaryML libMinCamlIL sourceIL |> ignore
@@ -95,9 +99,7 @@ let testOnce removeTempFiles sourceML = async {
 
     finally
         if removeTempFiles then
-            item.remove sourceIL
-            item.remove binaryML
-            item.remove binaryFS
+            tempFiles % item.remove
 }
 
 let solutionRoot = pwd/"../../.."
