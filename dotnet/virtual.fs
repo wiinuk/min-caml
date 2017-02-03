@@ -8,12 +8,13 @@ type location =
     | Arg
     | InstanceField
     | This
+    | StaticMethodSelf
 
 type env = {
     vars: Map<Id.t, Type.t * location>
     isTail: bool
     methodName: Id.l
-    locals: (Id.t * Type.t) list ref
+    locals: Map<Id.t, Type.t> ref
 }
 
 let topLevelTypeName = "MinCamlGlobal"
@@ -23,58 +24,166 @@ let localTypeToCliType (Id.L n) = TypeName(Class, [], [], [topLevelTypeName], n,
 
 let emptyBody = {
     isEntrypoint = false
-    locals = []
+    locals = Map.empty
     opcodes = [Ret]
 }
 
 let (++) xs x = x::xs
 let (+>) x f = f x
 
+let private getArrayElement = function
+    | Type.Array t -> t
+    | _ -> assert_false()
+
+let private getFunctionElements = function
+    | Type.Fun(ts, r) -> ts, r
+    | _ -> assert_false()
+
+let private getCliFunctionElements t =
+    let ts, t = getFunctionElements t
+    List.map cliType ts, cliType t
+
 let ld { vars = env } id acc =
     let t, location = Map.find id env
     match location with
     | Local -> acc++Ldloc id
     | Arg -> acc++Ldarg id
-    | This -> acc++Ldarg_0
+    | This -> acc++Ldarg0
     | InstanceField ->
         acc
-        ++Ldarg_0
+        ++Ldarg0
         ++Ldfld { fieldType = cliType t; declaringType = cli_type.This; name = Id.L id }
+
+    | StaticMethodSelf ->
+        let argTypes, resultType = getCliFunctionElements t
+        let funcType = funType argTypes resultType
+
+        // TODO: デリゲートをキャッシュして使いまわす
+        acc
+        ++Ldnull
+        ++Ldftn(methodRef(Static, Some resultType, topLevelType, Id.L id, [], argTypes))
+        ++Newobj(funcType, [Object; NativeInt])
 
 let many xs f acc = List.fold f acc xs
 
 let addRet isTail acc = if isTail then acc++Ret else acc
 
-/// 式の仮想マシンコード生成 (caml2html: virtual_g)
-let rec g ({ isTail = isTail; locals = locals; vars = vars } as env) acc = function
-    | Closure.Unit -> acc++Ldnull+>addRet isTail
-    | Closure.Int i -> acc++Ldc_I4 i+>addRet isTail
-    | Closure.Float d -> acc++Ldc_R8 d+>addRet isTail
-    | Closure.Neg x
-    | Closure.FNeg x -> acc+>ld env x++Neg+>addRet isTail
-    | Closure.Add(x, y)
-    | Closure.FAdd(x, y) -> g_binary env isTail acc Add (x, y)
-    | Closure.Sub(x, y)
-    | Closure.FSub(x, y) -> g_binary env isTail acc Sub (x, y)
-    | Closure.FMul(x, y) -> g_binary env isTail acc Mul (x, y)
-    | Closure.FDiv(x, y) -> g_binary env isTail acc Div (x, y)
-    | Closure.IfEq(x, y, e1, e2) -> g_branchRelation env acc Beq (x, y, e1, e2)
-    | Closure.IfLE(x, y, e1, e2) -> g_branchRelation env acc Ble (x, y, e1, e2)
+(*
+do
+    Ti3.4 : int =
+        Ti1.5 : int =
+            10
+        Ti2.6 : int =
+            20
+        Ti1.5 + Ti2.6
+    (min_caml_print_int : (int) -> ())(Ti3.4)
+*)
 
+let (|Binary|_|) = function
+    | Closure.Add(x, y)
+    | Closure.FAdd(x, y) -> Some(Add, x, y)
+    | Closure.Sub(x, y)
+    | Closure.FSub(x, y) -> Some(Sub, x, y)
+    | Closure.FMul(x, y) -> Some(Mul, x, y)
+    | Closure.FDiv(x, y) -> Some(Div, x, y)
+    | _ -> None
+
+let (|Unary|_|) = function
+    | Closure.Neg x
+    | Closure.FNeg x -> Some(Neg, x)
+    | _ -> None
+
+let (|Conditional|_|) = function
+    | Closure.IfEq(x, y, e1, e2) -> Some(BneUn, x, y, e1, e2)
+    | Closure.IfLE(x, y, e1, e2) -> Some(Bgt, x, y, e1, e2)
+    | _ -> None
+
+let notContains k1 k2 e1 e2 =
+    let xs1 = Closure.fv e1
+    not (Set.contains k1 xs1) &&
+    not (Set.contains k2 xs1) &&
+
+    let xs2 = Closure.fv e2
+    not (Set.contains k1 xs2) &&
+    not (Set.contains k2 xs2)
+
+
+/// 式の仮想マシンコード生成 (caml2html: virtual_g)
+let rec g ({ isTail = isTail; locals = locals; vars = vars } as env) x acc =
+    match x with
+    | Closure.Unit -> acc++Ldnull+>addRet isTail
+    | Closure.Int i -> acc++LdcI4 i+>addRet isTail
+    | Closure.Float d -> acc++LdcR8 d+>addRet isTail
+
+    | Unary(op, x) -> acc+>ld env x++op+>addRet isTail
+    | Binary(op, x, y) -> acc+>ld env x+>ld env y++op+>addRet isTail
+    | Conditional x -> g_branchRelation env x acc
     | Closure.Var x -> acc+>ld env x+>addRet isTail
+
+    // $x1 = $e1
+    // $x2 = $e2
+    // $x1 $op $x2
+    | Closure.Let((x1, _), e1, Closure.Let((x2, _), e2, Binary(op, x1', x2'))) when x1 = x1' && x2 = x2' ->
+        let env = { env with isTail = false }
+        acc+>g env e1+>g env e2++op
+
+    // $x1 = $e1
+    // $op $x1
+    | Closure.Let((x1, _), e1, Unary(op, x1')) when x1 = x1' ->
+        let env = { env with isTail = false }
+        acc+>g env e1++op
+
+    // $x1 = $e1
+    // $x2 = $e2
+    // if $x1 $op $x2 then
+    //     $ifTrue
+    // else
+    //     $iffalse
+    | Closure.Let((x1, _), e1, Closure.Let((x2, _), e2, Conditional((op, x1', x2', ifTrue, ifFalse) as c))) when x1 = x1' && x2 = x2' && notContains x1 x2 ifTrue ifFalse ->
+        let env' = { env with isTail = false }
+        acc+>g env' e1+>g env' e2+>g_branchRelationTail env (op, e1, e2)
+
+    // TODO: Syntax.App, Syntax.Tuple, Syntax.LetTuple, Syntax.Array, Syntax.Get, Syntax.Put
+    | Closure.Let _ -> ()
 
     // $e1
     // stloc $x
     // $e2
     | Closure.Let((x, t1), e1, e2) ->
-        let acc = g { env with isTail = false } acc e1++Stloc x
-        locals := (x, t1)::!locals
-        g { env with vars = M.add x (t1, Local) vars } acc e2
+        let acc = g { env with isTail = false } e1 acc++Stloc x
+        locals := Map.add x t1 !locals
+        g { env with vars = M.add x (t1, Local) vars } e2 acc
 
     // クロージャの生成 (caml2html: virtual_makecls)
-    | Closure.MakeCls((x, t), { Closure.entry = l; Closure.actual_fv = ys }, e2) ->
-        // [mincaml|let $x : $($ts -> $r) = let rec $l … = … $ys … in $e2|] ->
+
+    // TODO: デリゲートをキャッシュして使いまわす
+    // 静的メソッドから Func<…> を作成
+    | Closure.MakeCls((x, t), { Closure.entry = l; Closure.actual_fv = [] }, e2) ->
+        // ldnull
+        // ldftn static $(resultType t) $topLevelType::$l($(argType t 0), $(argType t 1), …)
+        // newobj instance void class [mscorlib]System.Func`…<$(ts.[0]), $(ts.[1]), …, $r>::.ctor(object, native int)
+        // stloc $x
         //
+        // $e2
+
+        let argTypes, resultType = getCliFunctionElements t
+        let funcType = funType argTypes resultType
+
+        let acc =
+            acc
+            ++Ldnull
+            ++Ldftn(methodRef(Static, Some resultType, topLevelType, l, [], argTypes))
+            ++Newobj(funcType, [Object; NativeInt])
+            ++Stloc x
+
+        locals := Map.add x t !locals
+        g { env with vars = Map.add x (t, Local) vars } acc e2
+
+    // TODO: デリゲートをキャッシュして使いまわす
+    // インスタンスメソッドから Func<…> を作成
+    | Closure.MakeCls((x, t), { Closure.entry = l; Closure.actual_fv = ys }, e2) ->
+        // [mincaml|let $x : $($ts -> $r) = let rec $l … = … $ys … in $e2|]
+
         // [cs|
         // class sealed $l
         // {
@@ -89,16 +198,16 @@ let rec g ({ isTail = isTail; locals = locals; vars = vars } as env) acc = funct
         // }
         //
         // var @temp_x = new $l();
-        // var $x = new Func<…>(@temp_x.Invoke);
-        // @temp_x.$x = $x;
-        //
         // @temp_x.$(ys.[0]) = $(ys.[0]);
         // @temp_x.$(ys.[1]) = $(ys.[1]);
         // ︙
         //
-        // $e2
-        // |] ->
+        // var $x = new Func<…>(@temp_x.Invoke);
+        // @temp_x.$x = $x;
         //
+        // $e2
+        // |]
+
         // [il|
         // .class sealed beforefieldinit $l
         // {
@@ -116,11 +225,6 @@ let rec g ({ isTail = isTail; locals = locals; vars = vars } as env) acc = funct
         // }
         //
         // newobj instance void $l::.ctor()
-        // ldftn instance $r $l::Invoke($(ts.[0]), $(ts.[1]), …)
-        // newobj instance void class [mscorlib]System.Func`…<$(ts.[0]), $(ts.[1]), …, $r>::.ctor(object, native int)
-        // stloc $x
-        // ldloc $x
-        // stfld class [mscorlib]System.Func`…<$(ts.[0]), $(ts.[1]), …, $r> $l::$x
         //
         // dup
         //     $(ld ys.[0])
@@ -130,29 +234,23 @@ let rec g ({ isTail = isTail; locals = locals; vars = vars } as env) acc = funct
         //     stfld $(typeof ys.[1]) $l::$(ys.[1])
         // ︙
         //
+        // dup
+        // ldftn instance $r $l::Invoke($(ts.[0]), $(ts.[1]), …)
+        // newobj instance void class [mscorlib]System.Func`…<$(ts.[0]), $(ts.[1]), …, $r>::.ctor(object, native int)
+        //
+        // stloc $x
+        // ldloc $x
+        // stfld class [mscorlib]System.Func`…<$(ts.[0]), $(ts.[1]), …, $r> $l::$x
         //
         // $e2
         // |]
 
-        let argTypes, resultType =
-            match t with
-            | Type.Fun(ts, r) -> List.map cliType ts, cliType r
-            | _ -> assert_false()
-
-        let funcType = cliType t
+        let argTypes, resultType = getCliFunctionElements t
+        let funcType = funType argTypes resultType
         let closuleType = localTypeToCliType l
         let acc =
             acc
             ++Newobj(closuleType, [])
-            ++ldftn(Some resultType, closuleType, "Invoke", argTypes)
-            ++Newobj(funcType, [Object; NativeInt])
-            ++Stloc x
-            ++Ldloc x
-            ++Stfld {
-                fieldType = funcType
-                declaringType = closuleType
-                name = Id.L x
-            }
             +>many ys (fun acc y ->
                 let yt, _ = Map.find y vars
                 acc
@@ -164,8 +262,18 @@ let rec g ({ isTail = isTail; locals = locals; vars = vars } as env) acc = funct
                     name = Id.L y
                 }
             )
+            ++Dup
+            ++Ldftn(methodRef(Instance, Some resultType, closuleType, Id.L "Invoke", [], argTypes))
+            ++Newobj(funcType, [Object; NativeInt])
+            ++Stloc x
+            ++Ldloc x
+            ++Stfld {
+                fieldType = funcType
+                declaringType = closuleType
+                name = Id.L x
+            }
 
-        locals := (x, t)::!locals
+        locals := Map.add x t !locals
         g { env with vars = Map.add x (t, Local) vars } acc e2
 
     // $(ld x)
@@ -176,10 +284,7 @@ let rec g ({ isTail = isTail; locals = locals; vars = vars } as env) acc = funct
     // callvirt instance !$(ys.length) class [mscorlib]System.Func`…<…>::Invoke(!0, !1, …)
     | Closure.AppCls(x, ys) ->
         let closureType = M.find x vars |> fst
-        let argLendth =
-            match closureType with
-            | Type.Fun(xs, _) -> List.length xs
-            | _ -> assert_false()
+        let argLendth = getFunctionElements closureType |> fst |> List.length
 
         acc
         +>ld env x
@@ -197,16 +302,26 @@ let rec g ({ isTail = isTail; locals = locals; vars = vars } as env) acc = funct
     // $(ld ys.[1])
     // ︙
     //
+    // call !0[] $topLevelType::$x
+    | Closure.AppDir((Id.L "min_caml_create_array" as x, t), ys) ->
+        let elementType = getFunctionElements t |> snd |> getArrayElement |> cliType
+        let et = MethodArgmentIndex 0
+        acc
+        +>g_loadMany ys env
+        ++Call(false, methodRef(Static, Some (Array et), topLevelType, x, [elementType], [Int32; et]))
+        +>addRet isTail
+
+    // $(ld ys.[0])
+    // $(ld ys.[1])
+    // ︙
+    //
     // call $(typeof(x).result) MinCamlGlobal::$l($(typeof ys.[0]), $(typeof ys.[1]), …)
     | Closure.AppDir((x, t), ys) ->
-        let argTypes, resultType =
-            match t with
-            | Type.Fun(argTypes, resultType) -> List.map cliType argTypes, cliType resultType
-            | _ -> assert_false()
+        let argTypes, resultType = getCliFunctionElements t
 
         acc
         +>g_loadMany ys env
-        ++Call(isTail && x = env.methodName, methodRef(Static, Some resultType, topLevelType, x, argTypes))
+        ++Call(isTail && x = env.methodName, methodRef(Static, Some resultType, topLevelType, x, [], argTypes))
         +>addRet isTail
 
     // 組の生成 (caml2html: virtual_tuple)
@@ -242,12 +357,12 @@ let rec g ({ isTail = isTail; locals = locals; vars = vars } as env) acc = funct
         many (List.indexed xts) (fun acc (i, (x, t)) ->
             if not <| Set.contains x s then acc else
 
-            locals := (x, t)::!locals
+            locals := Map.add x t !locals
 
             let methodName = sprintf "get_Item%d" <| i + 1
             acc
             ++Dup
-            ++Call(false, methodRef(Instance, Some <| TypeArgmentIndex i, tupleType, Id.L methodName, []))
+            ++Call(false, methodRef(Instance, Some <| TypeArgmentIndex i, tupleType, Id.L methodName, [], []))
             ++Stloc x
         )
 
@@ -284,45 +399,43 @@ let rec g ({ isTail = isTail; locals = locals; vars = vars } as env) acc = funct
         let n = Id.L <| "min_caml_" + x
         acc++Ldsfld { fieldType = Array(cliType et); declaringType = topLevelType; name = n }
 
+    | x -> failwith "unknown expression %A" x
+
 and g_loadMany xs env acc = many xs (fun acc x -> ld env x acc) acc
-and g_binary env isTail acc op (x, y) = acc+>ld env x+>ld env y++op+>addRet isTail
-and g_branchRelation ({ vars = vars; isTail = isTail } as env) acc op (x, y, e1, e2) =
+and g_branchRelationTail ({ isTail = isTail } as env) (op, e1, e2) acc =
+    let ifTrue = Id.L <| Id.genid "iftrue"
+    let acc = acc++op ifTrue+>g env e2
+    if isTail then
+        // ldxxx $x
+        // ldxxx $y
+        // $op 'iftrue'
+        //     $e2
+        //
+        // 'iftrue':
+        //     $e1
+        //
+        acc++Label ifTrue+>g env e1
+
+    else
+        // ldxxx $x
+        // ldxxx $y
+        // $op 'iftrue'
+        //     $e2
+        //     br 'endif'
+        //
+        // 'iftrue':
+        //     $e1
+        //
+        // 'endif':
+        
+        let endIf = Id.L <| Id.genid "endif"
+        acc++Br endIf++Label ifTrue+>g env e1++Label endIf
+
+and g_branchRelation ({ vars = vars; isTail = isTail } as env) (op, x, y, e1, e2) acc =
     match M.find x vars |> fst with
     | Type.Bool
     | Type.Int
-    | Type.Float ->
-        let ifTrue = Id.L <| Id.genid "iftrue"
-        let acc = acc+>ld env x+>ld env y++op ifTrue
-        let acc = g env acc e2
-
-        if isTail then
-            // ldxxx $x
-            // ldxxx $y
-            // $op 'iftrue'
-            //     $e2
-            //
-            // 'iftrue':
-            //     $e1
-            //
-            let acc = acc++Label ifTrue
-            g env acc e1
-            
-        else
-            // ldxxx $x
-            // ldxxx $y
-            // $op 'iftrue'
-            //     $e2
-            //     br 'endif'
-            //
-            // 'iftrue':
-            //     $e1
-            //
-            // 'endif':
-        
-            let endIf = Id.L <| Id.genid "endif"
-            let acc = acc++Br endIf++Label ifTrue
-            g env acc e1++Label endIf
-
+    | Type.Float -> acc+>ld env x+>ld env y+>g_branchRelationTail env (op, e1, e2)
     | _ -> failwith "operation supported only for bool, int, and float"
 
 let ctorDef(access, args, isForwardref, body) = {
@@ -342,13 +455,20 @@ let methodDef access callconv resultType (Id.L name' as name) args formalFvs isE
 
     let env = List.fold (fun env (y, t) -> Map.add y (t, Arg) env) Map.empty args
     let env = List.fold (fun env (z, t) -> Map.add z (t, InstanceField) env) env formalFvs
-    let env = Map.add name' (funcType, InstanceField) env
 
-    let locals = ref []
+    let env =
+        let location =
+            match callconv with
+            | Instance -> InstanceField
+            | Static -> StaticMethodSelf
+
+        Map.add name' (funcType, location) env
+
+    let locals = ref Map.empty
     let opcodes = g { vars = env; isTail = true; locals = locals; methodName = name } [] e
     let body = {
         isEntrypoint = isEntrypoint
-        locals = List.rev !locals
+        locals = !locals
         opcodes = List.rev opcodes
     }
     {
@@ -363,26 +483,6 @@ let methodDef access callconv resultType (Id.L name' as name) args formalFvs isE
         body = body
     }
 
-// .method public hidebysig static $(resultType t) $x
-// (
-//     $(snd yts.[0]) $(fst yts.[0]),
-//     $(snd yts.[1]) $(fst yts.[1]),
-//     ︙
-// )
-// cil managed 
-// {
-//     .locals
-//     (
-//         [0] ?type ?name,
-//         [1] ?type
-//     )
-//     $e
-// }
-let h_method { Closure.name = x, t; Closure.args = yts; Closure.body = e } =
-    let resultType = match t with Type.Fun(_, t) -> t | _ -> assert_false()
-    methodDef Public Static resultType x yts [] false e
-
-
 let compilerGeneratedAttributeType = TypeName(type_kind.Class, ["mscorlib"], ["System";"Runtime";"CompilerServices"], [], "CompilerGeneratedAttribute", [])
 let compilerGenerated = {
     ctor = ctorRef(compilerGeneratedAttributeType, [])
@@ -393,10 +493,10 @@ let compilerGenerated = {
 let defaultCtor =
     let body = {
         isEntrypoint = false
-        locals = []
+        locals = Map.empty
         opcodes =
         [
-            Ldarg_0
+            Ldarg0
             Call(false, ctorRef(Object, []))
             Ret
         ]
@@ -435,9 +535,9 @@ let defaultCtor =
 //      ret
 //    }
 // }
-let h_closureClass { Closure.name = x, t; Closure.args = yts; Closure.formal_fv = zts; Closure.body = e } =
+let closureClass { Closure.name = x, t; Closure.args = yts; Closure.formal_fv = zts; Closure.body = e } =
     let funcType = cliType t
-    let resultType = match t with Type.Fun(_, t) -> t | _ -> assert_false()
+    let resultType = getFunctionElements t |> snd
     let acc =
         []
         ++Custom compilerGenerated
@@ -451,13 +551,32 @@ let h_closureClass { Closure.name = x, t; Closure.args = yts; Closure.formal_fv 
         isSealed = true
         isBeforefieldinit = true
         name = x
-        body = List.rev acc
+        decls = List.rev acc
     }
+    
+// .method public hidebysig static $(resultType t) $x
+// (
+//     $(snd yts.[0]) $(fst yts.[0]),
+//     $(snd yts.[1]) $(fst yts.[1]),
+//     ︙
+// )
+// cil managed 
+// {
+//     .locals
+//     (
+//         [0] ?type ?name,
+//         [1] ?type
+//     )
+//     $e
+// }
+let staticMethod { Closure.name = x, t; Closure.args = yts; Closure.body = e } =
+    let resultType = getFunctionElements t |> snd
+    methodDef Public Static resultType x yts [] false e
 
 /// 関数の仮想マシンコード生成 (caml2html: virtual_h)
 let h = function
-    | { Closure.formal_fv = [] } as f -> Method <| h_method f
-    | f -> NestedClass <| h_closureClass f
+    | { Closure.formal_fv = [] } as f -> Method <| staticMethod f
+    | f -> NestedClass <| closureClass f
 
 /// プログラム全体の仮想マシンコード生成 (caml2html: virtual_f)
 let f (Closure.Prog(fundefs, e)) =

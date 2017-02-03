@@ -2,10 +2,6 @@
 open ExtraOperators
 open Xunit
 
-let libMinCamlIL = "dotnet/libmincaml.il"
-let ocamlCompatibilityDLL = "packages/FSharp.Compatibility.OCaml.0.2.0/lib/net40/FSharp.Compatibility.OCaml.dll"
-let ocamlCompatibilityFS = "ocaml.compatibility.fs"
-let mincaml = "dotnet/min-caml/bin/debug/min-caml.exe"
 let fsharpc = env"ProgramFiles"/"Microsoft SDKs/F#/4.0/Framework/v4.0/fsc.exe"
 //                 - 出力ファイル -
 // --out:<file>                   出力ファイルの名前 (短い形式: -o)
@@ -77,38 +73,28 @@ let fsharpc = env"ProgramFiles"/"Microsoft SDKs/F#/4.0/Framework/v4.0/fsc.exe"
 
 let (@.) = path.changeExtension
 
-let testOnce removeTempFiles sourceML = async {
+let testOnce sourceML = async {
     let sourceIL = sourceML@."il"
     let binaryML = sourceML@."ml.exe"
     let binaryFS = sourceML@."fs.exe"
-    let tempFiles = [sourceIL; binaryML; binaryFS]
+    [sourceIL; binaryML; binaryFS] % item.remove
 
-    tempFiles % item.remove
+    exe "min-caml" "%s" (sourceML@.null) |> ignore
+    exe "ilasm" "-nologo -exe -output=%s libmincaml.il %s" binaryML sourceIL |> ignore
+    exe fsharpc "--nologo --mlcompatibility --standalone --nowarn:0221 -o:%s -r:FSharp.Compatibility.OCaml.dll ocaml.compatibility.fs %s" binaryFS (sourceML@."ml") |> ignore
 
-    try
-        exe mincaml "%s" (sourceML@.null) |> ignore
-        exe "ilasm" """-nologo -exe -output="%s" "%s" %s""" binaryML libMinCamlIL sourceIL |> ignore
-        exe fsharpc """--nologo --mlcompatibility --standalone -o:"%s" -r:"%s" "%s" "%s" """
-            binaryFS ocamlCompatibilityDLL ocamlCompatibilityFS sourceML
-            |> ignore
+    let! resultMC = expression.invokeAsync binaryML ""
+    let! resultFS = expression.invokeAsync binaryFS ""
 
-        let! resultFS = expression.invokeAsync binaryFS ""
-        let! resultMC = expression.invokeAsync binaryML ""
-
-        Assert.Equal(resultFS, resultMC)
-
-    finally
-        if removeTempFiles then
-            tempFiles % item.remove
+    Assert.Equal(resultFS, resultMC)
 }
 
-let solutionRoot = pwd/"../../.."
-
+let sourcesDirectory = pwd/"sources"
 let sources() =
-    cd solutionRoot
-    gci "test/*.ml" |> select (fun x -> [|x.Name|])
+    cd sourcesDirectory
+    gci "*.ml" |> select (fun x -> [|x.Name|])
 
 [<Theory; MemberData "sources">]
 let test sourceML =
-    cd solutionRoot
-    "test"/sourceML |> testOnce true |> Async.StartAsTask
+    cd sourcesDirectory
+    testOnce sourceML |> Async.StartAsTask

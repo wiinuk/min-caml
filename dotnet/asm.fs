@@ -5,14 +5,17 @@ type cli_type =
 
     /// .this
     | This
-    /// e.g. !1
+    /// e.g. !0
     | TypeArgmentIndex of int
+    /// e.g. !!0
+    | MethodArgmentIndex of int
 
     /// sizeof<bool> = 1
     | Bool
     | Int32
     | Float64
     | Object
+    /// native int
     | NativeInt
     | Array of cli_type
 
@@ -25,19 +28,19 @@ let tupleType types =
 
 let unitType = TypeName(Class, ["mscorlib"], ["System"], [], "DBNull", [])
 
+let funType argTypes resultType =
+    let name = sprintf "Func`%d" <| List.length argTypes + 1
+    let args = argTypes @ [resultType]
+    TypeName(Class, ["mscorlib"], ["System"], [], name, args)
+
 let rec cliType = function
     | Type.Array t -> Array <| cliType t
     | Type.Unit -> unitType
     | Type.Bool -> Bool
     | Type.Int -> Int32
     | Type.Float -> Float64
-    | Type.Fun(argTypes, resultType) -> 
-        let arity = List.length argTypes + 1
-        let args = List.map cliType argTypes @ [cliType resultType]
-        TypeName(Class, ["mscorlib"], ["System"], [], sprintf "Func`%d" arity, args)
-
+    | Type.Fun(argTypes, resultType) -> funType (List.map cliType argTypes) (cliType resultType)
     | Type.Tuple ts -> tupleType <| List.map cliType ts
-
     | Type.Var { contents = Some t } -> cliType t
     | Type.Var { contents = None } -> failwith "unexpected type 'Var'"
 
@@ -51,6 +54,7 @@ type method_ref = {
     call_conv: call_conv
     resultType: cli_type option
     declaringType: cli_type
+    typeArgs: cli_type list
     methodName: method_name
     argTypes: cli_type list
 }
@@ -65,7 +69,7 @@ type t = exp list
 and exp =
     | Label of Id.l
 
-    | Ldarg_0
+    | Ldarg0
     | Ldarg of Id.t
     | Ldloc of Id.t
     | Stloc of Id.t
@@ -73,8 +77,8 @@ and exp =
     | Pop
 
     | Ldnull
-    | Ldc_I4 of int32
-    | Ldc_R8 of float
+    | LdcI4 of int32
+    | LdcR8 of float
 
     | Neg
     | Add
@@ -83,8 +87,8 @@ and exp =
     | Div
 
     | Br of Id.l
-    | Beq of Id.l
-    | Ble of Id.l
+    | BneUn of Id.l
+    | Bgt of Id.l
 
     | Call of isTail: bool * method_ref
     | Ret
@@ -102,10 +106,11 @@ and exp =
     | Callvirt of isTail: bool * method_ref
     | Ldftn of method_ref
 
-let methodRef(call_conv, resultType, declaringType, methodName, argTypes) = {
+let methodRef(call_conv, resultType, declaringType, methodName, typeArgs, argTypes) = {
     call_conv = call_conv
     resultType = resultType
     declaringType = declaringType
+    typeArgs = typeArgs
     methodName = MethodName methodName
     argTypes = argTypes
 }
@@ -113,24 +118,25 @@ let ctorRef(declaringType, argTypes) = {
     call_conv = Instance
     resultType = None
     declaringType = declaringType
+    typeArgs = []
     methodName = Ctor
     argTypes = argTypes
 }
 let ldftn(resultType, declaringType, name, argTypes) =
-    Ldftn <| methodRef(Instance, resultType, declaringType, Id.L name, argTypes)
+    Ldftn <| methodRef(Instance, resultType, declaringType, Id.L name, [], argTypes)
 
 let call(tail, callconv, resultType, declaringType, name, argTypes) =
-    Call(tail, methodRef(callconv, resultType, declaringType, name, argTypes))
+    Call(tail, methodRef(callconv, resultType, declaringType, name, [], argTypes))
 
 let callvirt(tail, resultType, declaringType, name, argTypes) =
-    Callvirt(tail, methodRef(Instance, resultType, declaringType, Id.L name, argTypes))
+    Callvirt(tail, methodRef(Instance, resultType, declaringType, Id.L name, [], argTypes))
 
 type accesibility = Public | Default
 type method_body = {
     isEntrypoint: bool
 
     /// .locals init (...)
-    locals: (Id.t * Type.t) list
+    locals: Map<Id.t, Type.t>
     opcodes: t
 }
 
@@ -168,7 +174,7 @@ and class_def = {
     isSealed: bool
     isBeforefieldinit: bool
     name: Id.l
-    body: class_decl list
+    decls: class_decl list
 }
 
 type prog = Prog of class_decl list * entrypoint: method_def

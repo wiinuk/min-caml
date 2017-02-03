@@ -38,16 +38,21 @@ module location =
     let get<'a> = Environment.CurrentDirectory
     let set x = Environment.CurrentDirectory <- x
 
-module childItem =
-    let get p =
+type Recurse = Recurse | NoRecurse
+type ChildItem =
+    static member Get(p, ?recure) =
+        let recure = defaultArg recure NoRecurse
         let parent, name = Path.GetDirectoryName p, Path.GetFileName p
         let parent = if parent = "" then "." else parent
         
-        Directory.EnumerateFileSystemEntries(parent, name)
+        Directory.EnumerateFileSystemEntries(parent, name, if recure = Recurse then SearchOption.AllDirectories else SearchOption.TopDirectoryOnly)
         |> Seq.map (function
             | p when File.Exists p -> FileInfo p :> FileSystemInfo
             | p -> DirectoryInfo p :> _
         )
+
+module childItem =
+    let get p = ChildItem.Get p
 
 type Item =
     static member Move(source, sink, ?force) =
@@ -194,6 +199,7 @@ module expression =
     let invoke command = 
         invokeAsyncCore false command
         >> Async.RunSynchronously
+        >> ignore
         |> Printf.kprintf
 
 [<AutoOpen>]

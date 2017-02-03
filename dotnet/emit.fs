@@ -51,6 +51,7 @@ let rec type' oc = function
     | NativeInt -> oc += "native int"
     | Array t -> type' oc t; oc += "[]"
     | TypeArgmentIndex x -> fprintf oc "!%d" x
+    | MethodArgmentIndex x -> fprintf oc "!!%d" x
     | TypeName(kind, moduleName, nameSpace, nestedParents, typeName, typeArgs) ->
         oc += match kind with Class -> "class " | ValueType -> "valuetype "
         groupOrEmpty "[" name "." "]" oc moduleName
@@ -79,13 +80,14 @@ let methodName oc = function
     | Ctor -> oc += ".ctor"
     | MethodName(Id.L n) -> name oc n
 
-let methodRef oc { call_conv = c; resultType = r; declaringType = t; methodName = n; argTypes = ts } =
+let methodRef oc { call_conv = c; resultType = r; declaringType = t; methodName = n; typeArgs = typeArgs; argTypes = ts } =
     oc += match c with Instance -> "instance " | Static -> ""
     resultType oc r
     oc += " "
     type' oc t
     oc += "::"
     methodName oc n
+    if not <| List.isEmpty typeArgs then group "<" type' ", " ">" oc typeArgs
     group "(" type' ", " ")" oc ts
 
 let fieldRef oc { fieldType = ft; declaringType = t; name = Id.L n } =
@@ -139,14 +141,14 @@ let opcode oc = function
     | Sub -> oc += "sub"
     | Mul -> oc += "mul"
     | Div -> oc += "div"
-    | Ldarg_0 -> oc += "ldarg.0"
+    | Ldarg0 -> oc += "ldarg.0"
     | Ldnull -> oc += "ldnull"
-    | Ldc_I4 x -> ldc_i4 oc x
-    | Ldc_R8 x -> ldc_r8 oc x
+    | LdcI4 x -> ldc_i4 oc x
+    | LdcR8 x -> ldc_r8 oc x
 
     | Br(Id.L l) -> oc += "br "; name oc l
-    | Beq(Id.L l) -> oc += "beq "; name oc l
-    | Ble(Id.L l) -> oc += "ble "; name oc l
+    | BneUn(Id.L l) -> oc += "bne.un "; name oc l
+    | Bgt(Id.L l) -> oc += "bgt "; name oc l
 
     | Ldarg l -> oc += "ldarg "; name oc l
     | Ldloc l -> oc += "ldloc "; name oc l
@@ -269,7 +271,7 @@ and classDef nested i oc
         isSealed = isSealed
         isBeforefieldinit = isBeforefieldinit
         name = Id.L n
-        body = decls
+        decls = decls
     }
     =
     oc += ".class "
@@ -292,6 +294,7 @@ let makeEntryPoint { name = n; resultType = resultType } =
                 resultType = resultType
                 declaringType = Virtual.topLevelType
                 methodName = n
+                typeArgs = []
                 argTypes = []
             })
             Pop

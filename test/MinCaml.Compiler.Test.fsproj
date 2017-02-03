@@ -61,7 +61,142 @@
     <Error Condition="!Exists('..\packages\xunit.runner.visualstudio.2.1.0\build\net20\xunit.runner.visualstudio.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\xunit.runner.visualstudio.2.1.0\build\net20\xunit.runner.visualstudio.props'))" />
   </Target>
   <ItemGroup>
-    <Content Include="packages.config" />
+    <None Include="..\dotnet\min-caml\bin\$(Configuration)\min-caml.exe">
+      <Link>sources\min-caml.exe</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Include="..\dotnet\libmincaml.il">
+      <Link>sources\libmincaml.il</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\packages\FSharp.Compatibility.OCaml.0.2.0\lib\net40\FSharp.Compatibility.OCaml.dll">
+      <Link>sources\FSharp.Compatibility.OCaml.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\ocaml.compatibility.fs">
+      <Link>sources\ocaml.compatibility.fs</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="cls-bug.ml">
+      <Link>sources\cls-bug.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="cls-bug2.ml">
+      <Link>sources\cls-bug2.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="cls-rec.ml">
+      <Link>sources\cls-rec.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="cls-reg-bug.ml">
+      <Link>sources\cls-reg-bug.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="even-odd.ml">
+      <Link>sources\even-odd.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="fib.ml">
+      <Link>sources\fib.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="float.ml">
+      <Link>sources\float.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="funcomp.ml">
+      <Link>sources\funcomp.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="gcd.ml">
+      <Link>sources\gcd.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="inprod-loop.ml">
+      <Link>sources\inprod-loop.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="inprod-rec.ml">
+      <Link>sources\inprod-rec.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="inprod.ml">
+      <Link>sources\inprod.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="join-reg.ml">
+      <Link>sources\join-reg.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="join-reg2.ml">
+      <Link>sources\join-reg2.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="join-stack.ml">
+      <Link>sources\join-stack.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="join-stack2.ml">
+      <Link>sources\join-stack2.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="join-stack3.ml">
+      <Link>sources\join-stack3.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="matmul-flat.ml">
+      <Link>sources\matmul-flat.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="matmul.ml">
+      <Link>sources\matmul.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="non-tail-if.ml">
+      <Link>sources\non-tail-if.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="non-tail-if2.ml">
+      <Link>sources\non-tail-if2.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="print.ml">
+      <Link>sources\print.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="shuffle.ml">
+      <Link>sources\shuffle.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="spill.ml">
+      <Link>sources\spill.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="spill2.ml">
+      <Link>sources\spill2.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="spill3.ml">
+      <Link>sources\spill3.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="sum-tail.ml">
+      <Link>sources\sum-tail.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="sum.ml">
+      <Link>sources\sum.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="ack.ml">
+      <Link>sources\ack.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="adder.ml">
+      <Link>sources\adder.ml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="..\dotnet\shell.fsx">
       <Link>shell.fsx</Link>
@@ -70,6 +205,7 @@
       <Link>Test.fs</Link>
     </Compile>
     <None Include="palette.fsx" />
+    <Content Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="FSharp.Compatibility.OCaml">
