@@ -81,6 +81,7 @@ let testOnce sourceML = async {
 
     exe "min-caml" "%s" (sourceML@.null) |> ignore
     exe "ilasm" "-nologo -exe -output=%s libmincaml.il %s" binaryML sourceIL |> ignore
+    // TODO: --standalone だとコンパイルが遅いので外す
     exe fsharpc "--nologo --mlcompatibility --standalone --nowarn:0221 -o:%s -r:FSharp.Compatibility.OCaml.dll ocaml.compatibility.fs %s" binaryFS (sourceML@."ml") |> ignore
 
     let! resultMC = expression.invokeAsync binaryML ""

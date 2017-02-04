@@ -1,3 +1,5 @@
+[<global.System.Diagnostics.CodeAnalysis.SuppressMessageAttribute("NameConventions", "TypeNamesMustBePascalCase")>]
+[<global.System.Diagnostics.CodeAnalysis.SuppressMessageAttribute("NameConventions", "IdentifiersMustNotContainUnderscores")>]
 module Asm
 
 type type_kind = Class | ValueType
@@ -51,7 +53,7 @@ type method_name =
     | Ctor
 
 type method_ref = {
-    call_conv: call_conv
+    callconv: call_conv
     resultType: cli_type option
     declaringType: cli_type
     typeArgs: cli_type list
@@ -106,31 +108,6 @@ and exp =
     | Callvirt of isTail: bool * method_ref
     | Ldftn of method_ref
 
-let methodRef(call_conv, resultType, declaringType, methodName, typeArgs, argTypes) = {
-    call_conv = call_conv
-    resultType = resultType
-    declaringType = declaringType
-    typeArgs = typeArgs
-    methodName = MethodName methodName
-    argTypes = argTypes
-}
-let ctorRef(declaringType, argTypes) = {
-    call_conv = Instance
-    resultType = None
-    declaringType = declaringType
-    typeArgs = []
-    methodName = Ctor
-    argTypes = argTypes
-}
-let ldftn(resultType, declaringType, name, argTypes) =
-    Ldftn <| methodRef(Instance, resultType, declaringType, Id.L name, [], argTypes)
-
-let call(tail, callconv, resultType, declaringType, name, argTypes) =
-    Call(tail, methodRef(callconv, resultType, declaringType, name, [], argTypes))
-
-let callvirt(tail, resultType, declaringType, name, argTypes) =
-    Callvirt(tail, methodRef(Instance, resultType, declaringType, Id.L name, [], argTypes))
-
 type accesibility = Public | Default
 type method_body = {
     isEntrypoint: bool
@@ -178,3 +155,53 @@ and class_def = {
 }
 
 type prog = Prog of class_decl list * entrypoint: method_def
+
+let methodRef(callconv, resultType, declaringType, methodName, typeArgs, argTypes) = {
+    callconv = callconv
+    resultType = resultType
+    declaringType = declaringType
+    typeArgs = typeArgs
+    methodName = MethodName methodName
+    argTypes = argTypes
+}
+let ctorRef(declaringType, argTypes) = {
+    callconv = Instance
+    resultType = None
+    declaringType = declaringType
+    typeArgs = []
+    methodName = Ctor
+    argTypes = argTypes
+}
+let ldftn(resultType, declaringType, name, argTypes) =
+    Ldftn <| methodRef(Instance, resultType, declaringType, Id.L name, [], argTypes)
+
+let call(tail, callconv, resultType, declaringType, name, argTypes) =
+    Call(tail, methodRef(callconv, resultType, declaringType, name, [], argTypes))
+
+let callvirt(tail, resultType, declaringType, name, argTypes) =
+    Callvirt(tail, methodRef(Instance, resultType, declaringType, Id.L name, [], argTypes))
+
+let ctorDef(access, args, isForwardref, body) = {
+    access = access
+    isSpecialname = true
+    isRtspecialname = true
+    callconv = Instance
+    resultType = None
+    name = Ctor
+    args = args
+    isForwardref = isForwardref
+    body = body
+}
+
+let defaultCtor =
+    let body = {
+        isEntrypoint = false
+        locals = Map.empty
+        opcodes =
+        [
+            Ldarg0
+            Call(false, ctorRef(Object, []))
+            Ret
+        ]
+    }
+    ctorDef(Public, [], false, body)

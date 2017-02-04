@@ -80,7 +80,7 @@ let methodName oc = function
     | Ctor -> oc += ".ctor"
     | MethodName(Id.L n) -> name oc n
 
-let methodRef oc { call_conv = c; resultType = r; declaringType = t; methodName = n; typeArgs = typeArgs; argTypes = ts } =
+let methodRef oc { callconv = c; resultType = r; declaringType = t; methodName = n; typeArgs = typeArgs; argTypes = ts } =
     oc += match c with Instance -> "instance " | Static -> ""
     resultType oc r
     oc += " "
@@ -97,7 +97,7 @@ let fieldRef oc { fieldType = ft; declaringType = t; name = Id.L n } =
     oc += "::"
     name oc n
 
-let ldc_i4 oc = function
+let ldcI4 oc = function
     | -1 -> oc += "ldc.i4.m1"
     | 0 -> oc += "ldc.i4.0"
     | 1 -> oc += "ldc.i4.1"
@@ -111,7 +111,7 @@ let ldc_i4 oc = function
     | x when -128 <= x && x <= 127 -> fprintf oc "ldc.i4.s %d" x
     | x -> fprintf oc "ldc.i4 %d" x
 
-let ldc_r8 oc x =
+let ldcR8 oc x =
     if float_of_int (int_of_float x) = x
     then fprintf oc "ldc.r8 %f" x
     else fprintf oc "ldc.r8 0x%016X" <| System.BitConverter.DoubleToInt64Bits x
@@ -143,8 +143,8 @@ let opcode oc = function
     | Div -> oc += "div"
     | Ldarg0 -> oc += "ldarg.0"
     | Ldnull -> oc += "ldnull"
-    | LdcI4 x -> ldc_i4 oc x
-    | LdcR8 x -> ldc_r8 oc x
+    | LdcI4 x -> ldcI4 oc x
+    | LdcR8 x -> ldcR8 oc x
 
     | Br(Id.L l) -> oc += "br "; name oc l
     | BneUn(Id.L l) -> oc += "bne.un "; name oc l
@@ -177,7 +177,7 @@ let opcode oc = function
 
     | Ldftn m -> oc += "ldftn "; methodRef oc m
 
-let opcodes hasTail i oc ops =
+let opcodes i oc ops =
     for op in ops do
         newline oc i
         opcode oc op
@@ -216,7 +216,7 @@ let methodBody i oc { isEntrypoint = isEntrypoint; locals = locals; opcodes = op
         oc += ".locals init "
         args i oc <| Map.toList locals
 
-    opcodes true i oc ops
+    opcodes i oc ops
 
 let methodDef i oc
     {
@@ -290,7 +290,7 @@ let makeEntryPoint { name = n; resultType = resultType } =
         opcodes =
         [
             Call(false, {
-                call_conv = Static
+                callconv = Static
                 resultType = resultType
                 declaringType = Virtual.topLevelType
                 methodName = n

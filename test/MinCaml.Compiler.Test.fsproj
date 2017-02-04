@@ -61,10 +61,10 @@
     <Error Condition="!Exists('..\packages\xunit.runner.visualstudio.2.1.0\build\net20\xunit.runner.visualstudio.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\xunit.runner.visualstudio.2.1.0\build\net20\xunit.runner.visualstudio.props'))" />
   </Target>
   <ItemGroup>
-    <None Include="..\dotnet\min-caml\bin\$(Configuration)\min-caml.exe">
+    <Content Include="..\dotnet\min-caml\bin\$(Configuration)\min-caml.exe">
       <Link>sources\min-caml.exe</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
+    </Content>
     <None Include="..\dotnet\libmincaml.il">
       <Link>sources\libmincaml.il</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

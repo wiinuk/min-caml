@@ -18,24 +18,30 @@ let rec iter n e =
     if e = e' then e
     else iter (n - 1) e'
 
-let closure limit l =
+let closure c l =
     Id.counter := 0
     Typing.extenv := M.empty
     Parser.exp Lexer.token (Lexing.from_string l)
     |> Typing.f
     |> KNormal.f
     |> Alpha.f
-    // |> iter limit
+    |> iter c
     |> Closure.f
 
-let lexbuf writer limit l =
-    closure limit l
-    |> Virtual.f
-//    |> Simm.f
-//    |> RegAlloc.f
-    |> Emit.f writer
-
 open System.IO
+
+let emit x =
+    use w = new StringWriter()
+    Emit.f w x
+    w.GetStringBuilder().ToString()
+
+let string iter l =
+    closure iter l
+    |> Virtual.f
+    |> Simm.f
+    |> RegAlloc.f
+    |> emit
+
 
 module PrintClosure =
     open Closure
@@ -81,8 +87,8 @@ module PrintClosure =
     let rec exp i x = seq {
         match x with
         | Unit -> yield "()"
-        | Int x -> yield string x
-        | Float x -> yield string x
+        | Int x -> yield Operators.string x
+        | Float x -> yield Operators.string x
 
         | Add(x, y) -> yield! [x; " + "; y]
         | Sub(x, y) -> yield! [x; " - "; y]
@@ -132,8 +138,8 @@ module PrintClosure =
             yield! newline i
             yield! exp i e2
 
-        | Get(xs, i) -> yield sprintf "%s.[%s]" xs i
-        | Put(xs, i, x) -> yield sprintf "%s.[%s] <- %s" xs i x
+        | Get(xs, i) -> yield sprintf "%s[%s]" xs i
+        | Put(xs, i, x) -> yield sprintf "%s[%s] <- %s" xs i x
         | ExtArray(Id.L xs, t) -> yield! between "(extern " ")" <| typed (xs, Type.Array t)
         }
     and ifRelational op i (x, y, e1, e2) = seq {
@@ -141,7 +147,7 @@ module PrintClosure =
         yield x
         yield op
         yield y
-        yield "then"
+        yield " then"
         yield! newline (i + 1)
         yield! exp (i + 1) e1
         yield! newline i
@@ -172,29 +178,61 @@ module PrintClosure =
         yield! newline 0
     }
 
-let string s =
-    use w = new StringWriter()
-    lexbuf w 1000 s
-    w.GetStringBuilder().ToString()
+string 1 "
+let rec ack x y =
+  if x <= 0 then y + 1 else
+  if y <= 0 then ack (x - 1) 1 else
+  ack (x - 1) (ack x (y - 1)) in
+print_int (ack 3 10)
 
-let c = closure 1000 "
-print_int(10 + 20)
 "
 
-PrintClosure.prog c |> String.concat ""
+closure 0 "
+let rec f x = x + 123 in
+p(f 1)
+"
+|> Stack.f
+
+c |> PrintClosure.prog |> String.concat ""
+
+let c' = Closure.Prog([], m)
+c'
+|> Virtual.f
+|> emit
+
+string 0 "f(1 + 2 + 3)"
+closure 0 "f(1 + 2 + 3)" |> PrintClosure.prog |> String.concat ""
 
 (*
+f.9 : (int) -> () ((n.10 : int)) {} =
+    Ti3.11 : int =
+        0
+    if Ti3.11 <= n.10 then
+        Tu1.12 : () =
+            (min_caml_print_int : (int) -> ())(n.10)
+        Ti4.14 : int =
+            1
+        a.13 : [(int) -> ()] =
+            (min_caml_create_array : (int, float) -> [(int) -> ()])(Ti4.14, f.9)
+        Ti5.16 : int =
+            0
+        Tf6.15 : (int) -> () =
+            a.13[Ti5.16]
+        Ti7.18 : int =
+            1
+        Ti8.17 : int =
+            n.10 - Ti7.18
+        Tf6.15#(Ti8.17)
+    else
+        ()
 do
-    Ti3.4 : int =
-        Ti1.5 : int =
-            10
-        Ti2.6 : int =
-            20
-        Ti1.5 + Ti2.6
-    (min_caml_print_int : (int) -> ())(Ti3.4)
+    f.9 : (int) -> () = f.9{}
+    Ti2.19 : int =
+        9
+    f.9#(Ti2.19)
 *)
 
-let ilsource = string """
+let ilsource = string 0 """
 let rec f x = if x = 0 then x else f (x - 1) in
 print_int (f 10)
 """
