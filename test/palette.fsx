@@ -42,10 +42,7 @@ let string iter l =
     |> RegAlloc.f
     |> emit
 
-
-module PrintClosure =
-    open Closure
-
+module Printer =
     let wrapCore first sep last xs = seq {
         match xs with
         | [] -> yield! first; yield! last
@@ -83,6 +80,11 @@ module PrintClosure =
         | Type.Var _ -> failwith "unexpected type 'Var'"
     }
     let typed (x, t) = seq { yield x; yield " : "; yield! type' t }
+
+
+module PrintClosure =
+    open Closure
+    open Printer
 
     let rec exp i x = seq {
         match x with
@@ -178,6 +180,116 @@ module PrintClosure =
         yield! newline 0
     }
 
+module PrintStack =
+    open Stack
+    open Printer
+
+    let unary = function
+        | Neg -> "-"
+
+    let binary = function
+        | Add -> " + "
+        | Sub -> " - "
+        | Mul -> " * "
+        | Div -> " / "
+        | Get _ -> " `get` "
+
+    let condition = function
+        | Eq -> " == "
+        | Le -> " <= "
+
+    let rec exp i x = seq {
+        match x with
+        | Unit -> yield "()"
+        | Int x -> yield Operators.string x
+        | Float x -> yield Operators.string x
+
+        | Binary(x, op, y) -> yield! exp i x; yield binary op; yield! exp i y
+        | Unary(op, x) -> yield unary op; yield! exp i x
+        | Condition(x, op, y, e1, e2) -> yield! ifRelational (condition op) i (x, y, e1, e2)
+        | Let(xt, e1, e2) ->
+            yield! typed xt
+            yield " ="
+            yield! newline (i + 1)
+            yield! exp (i + 1) e1
+            yield! newline i
+            yield! exp i e2
+
+        | Var x -> yield x
+        | MakeCls(xt, { entry = Id.L entry; actual_fv = actual_fv }, e2) ->
+            yield! typed xt
+            yield " = "
+            yield entry
+            yield! List.map Seq.singleton actual_fv |> wrap "{" ", " "}"
+            yield! newline i
+            yield! exp i e2
+
+        | AppCls(x, _, xs) ->
+            yield! exp i x
+            yield "#"
+            yield! wrapTuple <| List.map (exp i) xs
+
+        | AppDir((Id.L x, t), xs) ->
+            yield! between "(" ")" <| typed (x, t)
+            yield! wrapTuple <| List.map (exp i) xs
+
+        | Tuple(xs, ts) ->
+            yield! wrapTuple <| List.map (exp i) xs
+
+        | LetTuple(xs, x, e2) ->
+            yield! wrapTuple <| List.map typed xs
+            yield " ="
+            yield! newline (i + 1)
+            yield! exp i x
+            yield! newline i
+            yield! exp i e2
+
+        | Put(xs, _, ix, x) ->
+            yield! exp i xs
+            yield "["
+            yield! exp i ix
+            yield "] <- "
+            yield! exp i x
+
+        | ExtArray(Id.L xs, t) -> yield! between "(extern " ")" <| typed (xs, Type.Array t)
+        }
+
+    and ifRelational op i (x, y, e1, e2) = seq {
+        yield "if "
+        yield! exp i x
+        yield op
+        yield! exp i y
+        yield " then"
+        yield! newline (i + 1)
+        yield! exp (i + 1) e1
+        yield! newline i
+        yield "else"
+        yield! newline (i + 1)
+        yield! exp (i + 1) e2
+        }
+
+    let fundef { name = Id.L name, t; args = args; formal_fv = formal_fv; body = body } = seq {
+        yield name
+        yield " : "
+        yield! type' t
+        yield " "
+        yield! List.map (typed >> between "(" ")") args |> wrapTuple
+        yield " "
+        yield! List.map typed formal_fv |> wrap "{" ", " "}"
+        yield " ="
+        yield! newline 1
+        yield! exp 1 body
+    }
+    let prog (Prog(fundefs, main)) = seq {
+        for f in fundefs do
+            yield! fundef f
+            yield! newline 0
+        yield "do"
+        yield! newline 1
+        yield! exp 1 main
+        yield! newline 0
+    }
+
 string 1 "
 let rec ack x y =
   if x <= 0 then y + 1 else
@@ -187,11 +299,18 @@ print_int (ack 3 10)
 
 "
 
-closure 0 "
-let rec f x = x + 123 in
-p(f 1)
+closure 1000 "
+let rec ack x y =
+  if x <= 0 then y + 1 else
+  if y <= 0 then ack (x - 1) 1 else
+  ack (x - 1) (ack x (y - 1)) in
+print_int (ack 3 10)
+
 "
 |> Stack.f
+|> StackAlloc.f |> PrintStack.prog |> String.concat ""
+|> Virtual.f'
+|> emit
 
 c |> PrintClosure.prog |> String.concat ""
 
@@ -204,32 +323,61 @@ string 0 "f(1 + 2 + 3)"
 closure 0 "f(1 + 2 + 3)" |> PrintClosure.prog |> String.concat ""
 
 (*
-f.9 : (int) -> () ((n.10 : int)) {} =
-    Ti3.11 : int =
+ack.15 : (int, int) -> int ((x.16 : int), (y.17 : int)) {} =
+    Ti4.18 : int =
         0
-    if Ti3.11 <= n.10 then
-        Tu1.12 : () =
-            (min_caml_print_int : (int) -> ())(n.10)
-        Ti4.14 : int =
+    if x.16 <= Ti4.18 then
+        Ti5.19 : int =
             1
-        a.13 : [(int) -> ()] =
-            (min_caml_create_array : (int, float) -> [(int) -> ()])(Ti4.14, f.9)
-        Ti5.16 : int =
-            0
-        Tf6.15 : (int) -> () =
-            a.13[Ti5.16]
-        Ti7.18 : int =
-            1
-        Ti8.17 : int =
-            n.10 - Ti7.18
-        Tf6.15#(Ti8.17)
+        y.17 + Ti5.19
     else
-        ()
+        Ti6.20 : int =
+            0
+        if y.17 <= Ti6.20 then
+            Ti7.22 : int =
+                1
+            Ti8.21 : int =
+                x.16 - Ti7.22
+            Ti9.23 : int =
+                1
+            (ack.15 : (int, int) -> int)(Ti8.21, Ti9.23)
+        else
+            Ti10.25 : int =
+                1
+            Ti11.24 : int =
+                x.16 - Ti10.25
+            Ti12.28 : int =
+                1
+            Ti13.27 : int =
+                y.17 - Ti12.28
+            Ti14.26 : int =
+                (ack.15 : (int, int) -> int)(x.16, Ti13.27)
+            (ack.15 : (int, int) -> int)(Ti11.24, Ti14.26)
 do
-    f.9 : (int) -> () = f.9{}
-    Ti2.19 : int =
-        9
-    f.9#(Ti2.19)
+    Ti1.30 : int =
+        3
+    Ti2.31 : int =
+        10
+    Ti3.29 : int =
+        (ack.15 : (int, int) -> int)(Ti1.30, Ti2.31)
+    (min_caml_print_int : (int) -> ())(Ti3.29)
+
+///
+
+ack.15 : (int, int) -> int ((x.16 : int), (y.17 : int)) {} =
+    if x.16 <= 0 then
+        y.17 + 1
+    else
+        if y.17 <= 0 then
+            (ack.15 : (int, int) -> int)(x.16 - 1, 1)
+        else
+            Ti14.26 : int =
+                (ack.15 : (int, int) -> int)(x.16, y.17 - 1)
+            (ack.15 : (int, int) -> int)(x.16 - 1, Ti14.26)
+do
+    Ti3.29 : int =
+        (ack.15 : (int, int) -> int)(3, 10)
+    (min_caml_print_int : (int) -> ())(Ti3.29)
 *)
 
 let ilsource = string 0 """

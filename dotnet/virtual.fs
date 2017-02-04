@@ -95,32 +95,32 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
 
     | P.Condition(x, op, y, e1, e2) ->
         let ifTrue = Id.L <| Id.genid "iftrue"
-        let acc = acc+>nonTail env x+>nonTail env y++condition ifTrue op+>g env e2
+        let acc = acc+>nonTail env x+>nonTail env y++condition ifTrue op+>g env e1
 
         if isTail then
             // ldxxx $x
             // ldxxx $y
             // $op 'iftrue'
-            //     $e2
-            //
-            // 'iftrue':
             //     $e1
             //
-            acc++Label ifTrue+>g env e1
+            // 'iftrue':
+            //     $e2
+            //
+            acc++Label ifTrue+>g env e2
 
         else
             // ldxxx $x
             // ldxxx $y
             // $op 'iftrue'
-            //     $e2
+            //     $e1
             //     br 'endif'
             //
             // 'iftrue':
-            //     $e1
+            //     $e2
             //
             // 'endif':
             let endIf = Id.L <| Id.genid "endif"
-            acc++Br endIf++Label ifTrue+>g env e1++Label endIf
+            acc++Br endIf++Label ifTrue+>g env e2++Label endIf
 
     | P.Var x -> acc+>ld env x+>ret env
 
@@ -525,4 +525,4 @@ let f' (P.Prog(fundefs, e)) =
     )
 
 /// プログラム全体の仮想マシンコード生成 (caml2html: virtual_f)
-let f p = Stack.f p |> f'
+let f p = Stack.f p |> StackAlloc.f |> f'
