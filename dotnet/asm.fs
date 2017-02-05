@@ -192,6 +192,9 @@ let ctorRef(declaringType, argTypes) = {
     methodName = Ctor
     argTypes = argTypes
 }
+let getProp(callconv, propertyType, declaringType, propertyName) =
+    Call(false, methodRef(callconv, Some propertyType, declaringType, Id.L("get_" + propertyName), [], []))
+
 let ldftn(resultType, declaringType, name, argTypes) =
     Ldftn <| methodRef(Instance, resultType, declaringType, Id.L name, [], argTypes)
 

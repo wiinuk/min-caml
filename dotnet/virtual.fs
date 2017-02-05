@@ -361,7 +361,8 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
                 let acc, tailType = makeTuple tail acc
                 let types = types @ [tailType]
                 let tupleType = tupleType types
-                acc++Newobj(tupleType, types), tupleType
+                acc
+                ++Newobj(tupleType, types), tupleType
 
         acc
         +>(makeTuple xs >> fst)
@@ -380,21 +381,10 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
     // $e2
     | P.LetTuple(xts, y, e2) ->
         let s = P.freeVars e2
-        let tupleType = List.map (snd >> cliType) xts |> tupleType
 
         acc
         +>nonTail env y
-        +>many (List.indexed xts) (fun (i, (x, t)) acc ->
-            if not <| Set.contains x s then acc else
-
-            locals := Map.add x t !locals
-
-            let methodName = sprintf "get_Item%d" <| i + 1
-            acc
-            ++Dup
-            ++Call(false, methodRef(Instance, Some <| TypeArgmentIndex i, tupleType, Id.L methodName, [], []))
-            ++Stloc x
-        )
+        +>letTuple env xts e2
         +>g (addMany xts Local env) e2
 
     | P.Get(x, y) ->
@@ -427,6 +417,37 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
 
 and nonTail env x = g { env with isTail = false } x
 and nonTailMany xs env acc = many xs (g { env with isTail = false }) acc
+
+and letTuple { usedLocals = locals } xts e2 acc =
+    let s = P.freeVars e2
+    let rec aux xts acc =
+        let tupleType = List.map (snd >> cliType) xts |> tupleType
+        let xts, tail =
+            match tryTake 7 xts with
+            | None -> xts, []
+            | Some(xts, tail) -> xts, tail
+
+        let acc =
+            acc
+            +>many (List.indexed xts) (fun (i, (x, t)) acc ->
+                if not <| Set.contains x s then acc else
+
+                locals := Map.add x t !locals
+
+                acc
+                ++Dup
+                ++getProp(Instance, TypeArgmentIndex i, tupleType, "Item" + string (i + 1))
+                ++Stloc x
+            )
+
+        if List.isEmpty tail then acc else
+
+        acc
+        ++Dup
+        ++getProp(Instance, TypeArgmentIndex 7, tupleType, "Rest")
+        +>aux tail
+
+    aux xts acc
 
 // TODO: .maxstack の計測
 let methodDef access callconv resultType name args formalFvs isEntrypoint env e =
