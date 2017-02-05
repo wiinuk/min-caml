@@ -1,4 +1,9 @@
-﻿.vs/
+﻿# visual studio user-specific files
+*.suo
+
+# visual studio build results
+[Bb]in/
+[Oo]bj/
+
+# nuget packages
 packages/
-bin/
-obj/
