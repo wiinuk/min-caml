@@ -196,7 +196,7 @@ module expression =
     open expressionInternal
 
     let invokeAsync command = invokeAsyncCore true command |> Printf.kprintf
-    let invoke command = 
+    let invoke command =
         invokeAsyncCore false command
         >> Async.RunSynchronously
         >> ignore

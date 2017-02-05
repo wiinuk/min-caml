@@ -70,6 +70,7 @@ let fsharpc = env"ProgramFiles"/"Microsoft SDKs/F#/4.0/Framework/v4.0/fsc.exe"
 // --subsystemversion:<string>    このアセンブリのサブシステム バージョンを指定してください
 // --targetprofile:<string>       このアセンブリのターゲット フレームワーク プロファイルを指定してください。有効な値は mscorlib または netcore です。既定 - mscorlib
 // --quotations-debug[+|-]        デバッグ情報を引用符で囲んで生成します
+let fsharpcOptions = "--nologo --mlcompatibility --nooptimizationdata --nointerfacedata --nowarn:0221"
 
 let (@.) = path.changeExtension
 
@@ -79,10 +80,9 @@ let testOnce sourceML = async {
     let binaryFS = sourceML@."fs.exe"
     [sourceIL; binaryML; binaryFS] % item.remove
 
-    exe "min-caml" "%s" (sourceML@.null) |> ignore
-    exe "ilasm" "-nologo -exe -output=%s libmincaml.il %s" binaryML sourceIL |> ignore
-    // TODO: --standalone だとコンパイルが遅いので外す
-    exe fsharpc "--nologo --mlcompatibility --standalone --nowarn:0221 -o:%s -r:FSharp.Compatibility.OCaml.dll ocaml.compatibility.fs %s" binaryFS (sourceML@."ml") |> ignore
+    exe "min-caml" "%s" (sourceML@.null)
+    exe "ilasm" "-nologo -exe -output=%s libmincaml.il %s" binaryML sourceIL
+    exe fsharpc "%s -o:%s libmincaml.fs %s" fsharpcOptions binaryFS (sourceML@."ml")
 
     let! resultMC = expression.invokeAsync binaryML ""
     let! resultFS = expression.invokeAsync binaryFS ""

@@ -81,7 +81,6 @@ module Printer =
     }
     let typed (x, t) = seq { yield x; yield " : "; yield! type' t }
 
-
 module PrintClosure =
     open Closure
     open Printer
@@ -322,64 +321,6 @@ c'
 string 0 "f(1 + 2 + 3)"
 closure 0 "f(1 + 2 + 3)" |> PrintClosure.prog |> String.concat ""
 
-(*
-ack.15 : (int, int) -> int ((x.16 : int), (y.17 : int)) {} =
-    Ti4.18 : int =
-        0
-    if x.16 <= Ti4.18 then
-        Ti5.19 : int =
-            1
-        y.17 + Ti5.19
-    else
-        Ti6.20 : int =
-            0
-        if y.17 <= Ti6.20 then
-            Ti7.22 : int =
-                1
-            Ti8.21 : int =
-                x.16 - Ti7.22
-            Ti9.23 : int =
-                1
-            (ack.15 : (int, int) -> int)(Ti8.21, Ti9.23)
-        else
-            Ti10.25 : int =
-                1
-            Ti11.24 : int =
-                x.16 - Ti10.25
-            Ti12.28 : int =
-                1
-            Ti13.27 : int =
-                y.17 - Ti12.28
-            Ti14.26 : int =
-                (ack.15 : (int, int) -> int)(x.16, Ti13.27)
-            (ack.15 : (int, int) -> int)(Ti11.24, Ti14.26)
-do
-    Ti1.30 : int =
-        3
-    Ti2.31 : int =
-        10
-    Ti3.29 : int =
-        (ack.15 : (int, int) -> int)(Ti1.30, Ti2.31)
-    (min_caml_print_int : (int) -> ())(Ti3.29)
-
-///
-
-ack.15 : (int, int) -> int ((x.16 : int), (y.17 : int)) {} =
-    if x.16 <= 0 then
-        y.17 + 1
-    else
-        if y.17 <= 0 then
-            (ack.15 : (int, int) -> int)(x.16 - 1, 1)
-        else
-            Ti14.26 : int =
-                (ack.15 : (int, int) -> int)(x.16, y.17 - 1)
-            (ack.15 : (int, int) -> int)(x.16 - 1, Ti14.26)
-do
-    Ti3.29 : int =
-        (ack.15 : (int, int) -> int)(3, 10)
-    (min_caml_print_int : (int) -> ())(Ti3.29)
-*)
-
 let ilsource = string 0 """
 let rec f x = if x = 0 then x else f (x - 1) in
 print_int (f 10)
@@ -396,3 +337,7 @@ let peverify = env"ProgramFiles"/"Microsoft SDKs/Windows/v10.0A/bin/NETFX 4.6.1 
 exe peverify "adder.ml.exe"
 
 File.WriteAllText(Path.Combine(__SOURCE_DIRECTORY__, "test.il"), ilsource)
+
+cd <| __SOURCE_DIRECTORY__/"../dotnet"
+
+exe "fsc" "--nooptimizationdata --nointerfacedata --target:library libmincaml.fs"
