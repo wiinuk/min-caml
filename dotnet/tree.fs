@@ -2,7 +2,9 @@
     "NameConventions", "TypeNamesMustBePascalCase")>]
 [<global.System.Diagnostics.CodeAnalysis.SuppressMessageAttribute(
     "NameConventions", "IdentifiersMustNotContainUnderscores")>]
-module Stack
+
+/// SSA 形式から、スタック形式の CIL コードに変換しやすい式木への変換
+module Tree
 
 module P = Closure
 
@@ -12,13 +14,18 @@ type binary =
     | Sub
     | Mul
     | Div
-    | Get of Type.t
 
 type condition =
     | Eq
     | Le
 
-type t =
+type closure = {
+    entry: Id.l
+    /// field = expr, ...
+    actual_fv: (Id.l * t) list
+}
+
+and t =
     | Unit
     | Int of int
     | Float of float
@@ -27,13 +34,14 @@ type t =
     | Condition of t * condition * t * t * t
     | Let of (Id.t * Type.t) * t * t
     | Var of Id.t
-    | MakeCls of (Id.t * Type.t) * Closure.closure * t
-    | AppCls of t * (* closure type *) Type.t * t list
+    | MakeCls of (Id.t * Type.t) * closure * t
+    | AppCls of t * t list
     | AppDir of (Id.l * (* function type *) Type.t) * t list
-    | Tuple of t list * Type.t list
+    | Tuple of t list
     | LetTuple of (Id.t * Type.t) list * t * t
-    | Put of t * (* element type *) Type.t * t * t
-    | ExtArray of Id.l * (* element type *) Type.t
+    | Get of t * t
+    | Put of t * t * t
+    | ExtArray of Id.l * elementType: Type.t
 
 type fundef = {
     name: Id.l * Type.t
@@ -43,22 +51,62 @@ type fundef = {
 }
 type prog = Prog of fundef list * t
 
+let private resultType e = function
+    | Type.Fun(_, t) -> t
+    | _ -> failwithf "type inference error: %A" e
+
+type map<'k,'v,'m> = {
+    find: 'k -> 'm -> 'v
+    add: 'k -> 'v -> 'm -> 'm
+}
+
+let rec typeof map env = function
+    | Unit
+    | Put _ -> Type.Unit
+    | Int _ -> Type.Int
+    | Float _ -> Type.Float
+    | Tuple es -> List.map (typeof map env) es |> Type.Tuple
+
+    | Unary(_, e)
+    | Binary(e, _, _)
+    | Condition(_, _, _, e, _) -> typeof map env e
+
+    | Get(e, _) ->
+        match typeof map env e with
+        | Type.Array t -> t
+        | _ -> failwithf "type inference error: %A" e
+
+    | Var x ->
+        try map.find x env
+        with :? System.Collections.Generic.KeyNotFoundException ->
+            failwithf "key not found: %A, env: %A" x env
+
+    | Let((x, t), _, e) -> typeof map (map.add x t env) e
+    | MakeCls((x, t), _, e) -> typeof map (map.add x t env) e
+
+    | AppCls(e, _) as e' -> resultType e' <| typeof map env e
+    | AppDir((_, t), _) as e' -> resultType e' t
+
+    | LetTuple(xts, _, e) -> typeof map (List.fold (fun env (x, t) -> map.add x t env) env xts) e
+    | ExtArray(_, et) -> Type.Array et
+
 let (-.) xs x = Set.remove x xs
 
 let rec freeVars = function
     | Unit | Int _ | Float _ | ExtArray _ -> Set.empty
     | Var x -> Set.singleton x
 
-    | Binary(e1, _, e2) -> freeVars e1 + freeVars e2
     | Unary(_, e) -> freeVars e
-    | Put(e1, _, e2, e3) -> freeVars e1 + freeVars e2 + freeVars e3
-    | AppCls(e, _, es) -> freeVars e + Set.unionMany (Seq.map freeVars es)
+    | Binary(e1, _, e2)
+    | Get(e1, e2) -> freeVars e1 + freeVars e2
+    | Put(e1, e2, e3) -> freeVars e1 + freeVars e2 + freeVars e3
+    | AppCls(e, es) -> freeVars e + Set.unionMany (Seq.map freeVars es)
     | Condition(e1, _, e2, e3, e4) -> freeVars e1 + freeVars e2 + freeVars e3 + freeVars e4
     | AppDir(_, es)
-    | Tuple(es, _) -> Seq.map freeVars es |> Set.unionMany
+    | Tuple es -> Seq.map freeVars es |> Set.unionMany
 
     | Let((x, _), e1, scope) -> freeVars scope -. x + freeVars e1
-    | MakeCls((x, _), { actual_fv = vs }, e) -> Set.ofList vs + freeVars e -. x
+    | MakeCls((x, _), { actual_fv = vs }, e) -> Set.unionMany (Seq.map (snd >> freeVars) vs) + freeVars e -. x
     | LetTuple(xts, e, scope) -> freeVars scope - Set.ofSeq (Seq.map fst xts) + freeVars e
 
 let notContains k e = not (Set.contains k (P.fv e))
@@ -70,33 +118,6 @@ let notContains2 k1 k2 e1 e2 =
     let xs2 = P.fv e2
     not (Set.contains k1 xs2) &&
     not (Set.contains k2 xs2)
-
-let (|ClosureBinary|_|) env = function
-    | P.Add(x, y)
-    | P.FAdd(x, y) -> Some(x, Add, y)
-    | P.Sub(x, y)
-    | P.FSub(x, y) -> Some(x, Sub, y)
-    | P.FMul(x, y) -> Some(x, Mul, y)
-    | P.FDiv(x, y) -> Some(x, Div, y)
-    | P.Get(x, y) ->
-        let elementType =
-            match Map.find x env with
-            | Type.Array t -> t
-            | _ -> assert_false()
-
-        Some(x, Get elementType, y)
-
-    | _ -> None
-
-let (|ClosureUnary|_|) = function
-    | P.Neg x
-    | P.FNeg x -> Some(Neg, x)
-    | _ -> None
-
-let (|ClosureCondition|_|) = function
-    | P.IfEq(x, y, e1, e2) -> Some(Eq, x, y, e1, e2)
-    | P.IfLE(x, y, e1, e2) -> Some(Le, x, y, e1, e2)
-    | _ -> None
 
 let takeLets e =
     let rec takeLetsRev xtes = function
@@ -135,17 +156,37 @@ let rec expr env = function
     | P.IfLE(x1, x2, e1, e2) -> Condition(Var x1, Le, Var x2, expr env e1, expr env e2)
 
     | P.Var x -> Var x
-    | P.AppCls(x, xs) -> AppCls(Var x, Map.find x env, List.map Var xs)
-    | P.AppDir(x, xs) -> AppDir(x, List.map Var xs)
-    | P.Tuple xs -> Tuple(List.map Var xs, List.map (fun x -> Map.find x env) xs)
-    | P.Get(x1, x2) -> Binary(Var x1, Map.find x1 env |> arrayElementType |> Get, Var x2)
-    | P.Put(x1, x2, x3) -> Put(Var x1, M.find x1 env |> arrayElementType, Var x2, Var x3)
+    | P.AppCls(x, xs) -> AppCls(Var x, List.map Var xs)
+    | P.AppDir(Id.L x as x', xs) ->
+        let t =
+            match Map.tryFind x env with
+            | Some t -> t
+            | None ->
 
-    | P.ExtArray(x, t) -> ExtArray(x, t)
+                // Array.make の糖衣構文 ( Typing.extenv には登録されない )
+                match x with
+                | "min_caml_create_float_array" -> Type.Fun([Type.Int], Type.Array Type.Float)
+                | "min_caml_create_array" -> Type.Fun([Type.Int], Type.Array (Map.find xs.[1] env))
+                | _ ->
+
+                // Closure.g で付いた "min_caml_" を除去
+                let prefix = "min_caml_"
+                if x.StartsWith prefix then Map.find x.[prefix.Length..] !Typing.extenv
+                else assert_false()
+
+        AppDir((x', t), List.map Var xs)
+
+    | P.Tuple xs -> Tuple <| List.map Var xs
+    | P.Get(x1, x2) -> Get(Var x1, Var x2)
+    | P.Put(x1, x2, x3) -> Put(Var x1, Var x2, Var x3)
+
+    | P.ExtArray(Id.L x as x') -> ExtArray(x', Map.find x !Typing.extenv |> arrayElementType)
 
     | P.LetTuple(xts, x, scope) -> LetTuple(xts, Var x, expr (addVars xts env) scope)
     | P.Let((x1, t1) as xt1, e1, e2) -> Let(xt1, expr env e1, expr (Map.add x1 t1 env) e2)
-    | P.MakeCls((x1, t1) as xt1, c, e) -> MakeCls(xt1, c, expr (Map.add x1 t1 env) e)
+    | P.MakeCls((x1, t1) as xt1, { Closure.entry = l; Closure.actual_fv = fvs }, e) ->
+        let fvs = List.map (fun v -> Id.L v, Var v) fvs
+        MakeCls(xt1, { entry = l; actual_fv = fvs }, expr (Map.add x1 t1 env) e)
 
 let fundef env { P.name = Id.L l, t as name; P.args = args; P.formal_fv = formal_fv; P.body = body } =
     let env = env |> Map.add l t |> addVars args |> addVars formal_fv

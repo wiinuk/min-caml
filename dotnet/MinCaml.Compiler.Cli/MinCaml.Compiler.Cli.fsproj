@@ -53,8 +53,8 @@
   <ItemGroup>
     <Content Include="packages.config" />
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="..\stack.fs">
-      <Link>stack.fs</Link>
+    <Compile Include="..\tree.fs">
+      <Link>tree.fs</Link>
     </Compile>
     <Compile Include="..\stackAlloc.fs">
       <Link>stackAlloc.fs</Link>

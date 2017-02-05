@@ -1,5 +1,7 @@
-[<global.System.Diagnostics.CodeAnalysis.SuppressMessageAttribute("NameConventions", "TypeNamesMustBePascalCase")>]
-[<global.System.Diagnostics.CodeAnalysis.SuppressMessageAttribute("NameConventions", "IdentifiersMustNotContainUnderscores")>]
+[<global.System.Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+    "NameConventions", "TypeNamesMustBePascalCase")>]
+[<global.System.Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+    "NameConventions", "IdentifiersMustNotContainUnderscores")>]
 module Asm
 
 type type_kind = Class | ValueType
@@ -22,11 +24,29 @@ type cli_type =
     | Array of cli_type
 
     /// e.g. class [moduleA]NamespaceA.ClassA/ClassB/Class
-    | TypeName of type_kind * moduleName: Id.t list * nameSpace: Id.t list * nestedParents: Id.t list * typeName: Id.t * typeArgs: cli_type list
+    | TypeName of
+        type_kind *
+        moduleName: Id.t list *
+        nameSpace: Id.t list *
+        nestedParents: Id.t list *
+        typeName: Id.t *
+        typeArgs: cli_type list
 
-let tupleType types =
+let tryTake n xs =
+    let rec aux n acc = function
+        | xs when n <= 0 -> Some(List.rev acc, xs)
+        | [] -> None
+        | x::xs -> aux (n - 1) (x::acc) xs
+    aux n [] xs
+
+let rec tupleType types =
+    let types =
+        match tryTake 7 types with
+        | None | Some(_, []) -> types
+        | Some(types, tail) -> types @ [tupleType tail]
+
     let arity = List.length types
-    TypeName(Class, ["mscorlib"], ["System"], [], sprintf "Tuple`%d" arity, types)
+    TypeName(Class, ["mscorlib"], ["System"], [], "Tuple`" + string arity, types)
 
 let unitType = TypeName(Class, ["mscorlib"], ["System"], [], "DBNull", [])
 

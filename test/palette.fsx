@@ -43,10 +43,13 @@ let string iter l =
     |> emit
 
 module Printer =
-    let wrapCore first sep last xs = seq {
-        match xs with
-        | [] -> yield! first; yield! last
-        | t::ts ->
+    let wrapCore emptyIfNonWrap singleIfNonWrap first sep last xs = seq {
+        if Seq.isEmpty xs then
+            yield! first
+            yield! last
+        else
+            let t = Seq.head xs
+            let ts = Seq.tail xs
             yield! first
             yield! t
             for t in ts do
@@ -54,7 +57,7 @@ module Printer =
                 yield! t
             yield! last
     }
-    let wrap first sep last xs = wrapCore [first] [sep] [last] xs
+    let wrap first sep last xs = wrapCore false false [first] [sep] [last] xs
     let wrapTuple = wrap "(" ", " ")"
 
     let between first last x = seq {
@@ -74,17 +77,21 @@ module Printer =
         | Type.Bool -> yield "bool"
         | Type.Int -> yield "int"
         | Type.Float -> yield "float"
-        | Type.Fun(ts, t) -> yield! List.map type' ts |> wrapTuple; yield " -> "; yield! type' t
+        | Type.Fun(ts, t) ->
+            yield! List.map type' ts |> wrapCore false true ["("] [", "] [")"]
+            yield " => "
+            yield! type' t
+
         | Type.Tuple ts -> yield! List.map type' ts |> wrapTuple
         | Type.Var { contents = Some t } -> yield! type' t
         | Type.Var _ -> failwith "unexpected type 'Var'"
     }
     let typed (x, t) = seq { yield x; yield " : "; yield! type' t }
 
-module PrintClosure =
+module ClosurePrinter =
     open Closure
     open Printer
-
+    
     let rec exp i x = seq {
         match x with
         | Unit -> yield "()"
@@ -104,8 +111,7 @@ module PrintClosure =
 
         | Let(xt, e1, e2) ->
             yield! typed xt
-            yield " ="
-            yield! newline (i + 1)
+            yield " = "
             yield! exp (i + 1) e1
             yield! newline i
             yield! exp i e2
@@ -124,8 +130,8 @@ module PrintClosure =
             yield "#"
             yield! wrapTuple <| List.map Seq.singleton xs
 
-        | AppDir((Id.L x, t), xs) ->
-            yield! between "(" ")" <| typed (x, t)
+        | AppDir(Id.L x, xs) ->
+            yield x
             yield! wrapTuple <| List.map Seq.singleton xs
 
         | Tuple xs ->
@@ -133,15 +139,14 @@ module PrintClosure =
 
         | LetTuple(xs, x, e2) ->
             yield! wrapTuple <| List.map typed xs
-            yield " ="
-            yield! newline (i + 1)
+            yield " = "
             yield x
             yield! newline i
             yield! exp i e2
 
         | Get(xs, i) -> yield sprintf "%s[%s]" xs i
         | Put(xs, i, x) -> yield sprintf "%s[%s] <- %s" xs i x
-        | ExtArray(Id.L xs, t) -> yield! between "(extern " ")" <| typed (xs, Type.Array t)
+        | ExtArray(Id.L xs) -> yield sprintf "(extern %s)" xs
         }
     and ifRelational op i (x, y, e1, e2) = seq {
         yield "if "
@@ -158,11 +163,9 @@ module PrintClosure =
         }
 
     let fundef { name = Id.L name, t; args = args; formal_fv = formal_fv; body = body } = seq {
-        yield name
-        yield " : "
-        yield! type' t
+        yield! typed (name, t)
         yield " "
-        yield! List.map (typed >> between "(" ")") args |> wrapTuple
+        yield! List.map typed args |> wrapTuple
         yield " "
         yield! List.map typed formal_fv |> wrap "{" ", " "}"
         yield " ="
@@ -179,8 +182,8 @@ module PrintClosure =
         yield! newline 0
     }
 
-module PrintStack =
-    open Stack
+module TreePrinter =
+    open Tree
     open Printer
 
     let unary = function
@@ -191,11 +194,25 @@ module PrintStack =
         | Sub -> " - "
         | Mul -> " * "
         | Div -> " / "
-        | Get _ -> " `get` "
 
     let condition = function
         | Eq -> " == "
         | Le -> " <= "
+
+    let rec isSingleLine = function
+        | Unit
+        | Int _
+        | Float _
+        | Var _
+        | ExtArray _ -> true
+
+        | Binary(x, _, y) -> isSingleLine x && isSingleLine y
+        | Unary(_, x) -> isSingleLine x
+        | AppCls(x, xs) -> isSingleLine x && List.forall isSingleLine xs
+        | AppDir(_, xs)
+        | Tuple xs -> List.forall isSingleLine xs
+
+        | _ -> false
 
     let rec exp i x = seq {
         match x with
@@ -208,9 +225,13 @@ module PrintStack =
         | Condition(x, op, y, e1, e2) -> yield! ifRelational (condition op) i (x, y, e1, e2)
         | Let(xt, e1, e2) ->
             yield! typed xt
-            yield " ="
-            yield! newline (i + 1)
-            yield! exp (i + 1) e1
+            if isSingleLine e1 then
+                yield " = "
+                yield! exp (i + 1) e1
+            else
+                yield " ="
+                yield! newline (i + 1)
+                yield! exp (i + 1) e1
             yield! newline i
             yield! exp i e2
 
@@ -219,11 +240,19 @@ module PrintStack =
             yield! typed xt
             yield " = "
             yield entry
-            yield! List.map Seq.singleton actual_fv |> wrap "{" ", " "}"
+            yield!
+                actual_fv
+                |> Seq.map (fun (Id.L l, e) -> seq {
+                    yield l
+                    yield " = "
+                    yield! exp (i + 1) e 
+                })
+                |> wrap "{" ", " "}"
+
             yield! newline i
             yield! exp i e2
 
-        | AppCls(x, _, xs) ->
+        | AppCls(x, xs) ->
             yield! exp i x
             yield "#"
             yield! wrapTuple <| List.map (exp i) xs
@@ -232,7 +261,7 @@ module PrintStack =
             yield! between "(" ")" <| typed (x, t)
             yield! wrapTuple <| List.map (exp i) xs
 
-        | Tuple(xs, ts) ->
+        | Tuple xs ->
             yield! wrapTuple <| List.map (exp i) xs
 
         | LetTuple(xs, x, e2) ->
@@ -243,7 +272,13 @@ module PrintStack =
             yield! newline i
             yield! exp i e2
 
-        | Put(xs, _, ix, x) ->
+        | Get(xs, ix) ->
+            yield! exp i xs
+            yield "["
+            yield! exp i ix
+            yield "]"
+
+        | Put(xs, ix, x) ->
             yield! exp i xs
             yield "["
             yield! exp i ix
@@ -265,14 +300,12 @@ module PrintStack =
         yield "else"
         yield! newline (i + 1)
         yield! exp (i + 1) e2
-        }
+    }
 
     let fundef { name = Id.L name, t; args = args; formal_fv = formal_fv; body = body } = seq {
-        yield name
-        yield " : "
-        yield! type' t
+        yield! typed (name, t)
         yield " "
-        yield! List.map (typed >> between "(" ")") args |> wrapTuple
+        yield! List.map typed args |> wrapTuple
         yield " "
         yield! List.map typed formal_fv |> wrap "{" ", " "}"
         yield " ="
@@ -289,55 +322,67 @@ module PrintStack =
         yield! newline 0
     }
 
-string 1 "
-let rec ack x y =
-  if x <= 0 then y + 1 else
-  if y <= 0 then ack (x - 1) 1 else
-  ack (x - 1) (ack x (y - 1)) in
-print_int (ack 3 10)
+
+
+    Id.counter := 0
+    Typing.extenv := M.empty
+
+Asm.tupleType (List.replicate 9 Asm.Int32)
+
+Id.counter := 0
+Typing.extenv := M.empty
 
 "
-
-closure 1000 "
-let rec ack x y =
-  if x <= 0 then y + 1 else
-  if y <= 0 then ack (x - 1) 1 else
-  ack (x - 1) (ack x (y - 1)) in
-print_int (ack 3 10)
+f(1,2,3,4,5,6,7,8,9)
 
 "
-|> Stack.f
-|> StackAlloc.f |> PrintStack.prog |> String.concat ""
+|> closure 1000
+
+// |> ClosurePrinter.prog |> String.concat ""
+(*
+f.9 : (int) => () (n.10 : int) {} =
+    Ti3.11 : int = 0
+    if Ti3.11 <= n.10 then
+        Tu1.12 : () = (min_caml_print_int : (int) => ())(n.10)
+        Ti4.14 : int = 1
+        a.13 : [(int) => ()] = (min_caml_create_array : (int, float) => [(int) => ()])(Ti4.14, f.9)
+        Ti5.16 : int = 0
+        Tf6.15 : (int) => () = a.13[Ti5.16]
+        Ti7.18 : int = 1
+        Ti8.17 : int = n.10 - Ti7.18
+        Tf6.15#(Ti8.17)
+    else
+        ()
+do
+    f.9 : (int) => () = f.9{}
+    Ti2.19 : int = 9
+    f.9#(Ti2.19)
+*)
+|> Tree.f
+|> StackAlloc.f
+
+// |> StackPrinter.prog |> String.concat ""
+(*
+f.9 : (int) => () (n.10 : int) {} =
+    if 0 <= n.10 then
+        Tu1.12 : () = (min_caml_print_int : (int) => ())(n.10)
+        a.13 : [(int) => ()] = (min_caml_create_array : (int, float) => [(int) => ()])(1, f.9)
+        a.13 `get` 0#(n.10 - 1)
+    else
+        ()
+do
+    f.9 : (int) => () = f.9{}
+    f.9#(9)
+*)
 |> Virtual.f'
 |> emit
-
-c |> PrintClosure.prog |> String.concat ""
-
-let c' = Closure.Prog([], m)
-c'
-|> Virtual.f
-|> emit
-
-string 0 "f(1 + 2 + 3)"
-closure 0 "f(1 + 2 + 3)" |> PrintClosure.prog |> String.concat ""
-
-let ilsource = string 0 """
-let rec f x = if x = 0 then x else f (x - 1) in
-print_int (f 10)
-"""
 
 #r "bin/Debug/MinCaml.Compiler.Test.dll"
 open ExtraOperators
 cd <| __SOURCE_DIRECTORY__/"bin/debug/sources"
 pwd
 Test.testOnce "ack" |> Async.RunSynchronously
-Test.testOnce "cls-bug2" |> Async.RunSynchronously
+Test.testOnce "cls-rec" |> Async.RunSynchronously
 
 let peverify = env"ProgramFiles"/"Microsoft SDKs/Windows/v10.0A/bin/NETFX 4.6.1 Tools/PEVerify.exe"
 exe peverify "adder.ml.exe"
-
-File.WriteAllText(Path.Combine(__SOURCE_DIRECTORY__, "test.il"), ilsource)
-
-cd <| __SOURCE_DIRECTORY__/"../dotnet"
-
-exe "fsc" "--nooptimizationdata --nointerfacedata --target:library libmincaml.fs"
