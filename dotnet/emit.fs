@@ -1,6 +1,7 @@
 module Emit
 open Asm
 open FSharp.Compatibility.OCaml
+open System
 
 let (+=) o s = output_string o s
 
@@ -8,13 +9,14 @@ let newline oc i =
     oc += "\r\n"
     for _ in 1..i do oc += "    "
 
-let groupCore emptyIfIgnore first emit sep last o = function
-    | [] ->
+let groupCore emptyIfIgnore first emit sep last o xs =
+    if Seq.isEmpty xs then
         if emptyIfIgnore then () else
         o += first
         o += last
-
-    | x::xs ->
+    else
+        let x = Seq.head xs
+        let xs = Seq.tail xs
         o += first
         emit o x
         for x in xs do
@@ -24,6 +26,9 @@ let groupCore emptyIfIgnore first emit sep last o = function
 
 let groupOrEmpty first emit sep last o xs = groupCore true first emit sep last o xs
 let group first emit sep last o xs = groupCore false first emit sep last o xs
+
+let hexByte w x = fprintf w "%02x" x
+let wrapBytes w xs = group "(" hexByte " " ")" w xs
 
 // TODO: エスケープ処理
 let name oc = function
@@ -112,9 +117,16 @@ let ldcI4 oc = function
     | x -> fprintf oc "ldc.i4 %d" x
 
 let ldcR8 oc x =
-    if float_of_int (int_of_float x) = x
-    then fprintf oc "ldc.r8 %f" x
-    else fprintf oc "ldc.r8 0x%016X" <| System.BitConverter.DoubleToInt64Bits x
+    oc += "ldc.r8 "
+
+    if Double.IsNaN x || Double.IsInfinity x then
+
+        // TODO: エンディアンを考慮する必要がある?
+        wrapBytes oc <| BitConverter.GetBytes x
+
+    else
+        // ラウンドトリップ
+        fprintf oc "%.17g" x
 
 let rec arrayAccess u1 i4 r8 ref = function
     | Type.Bool -> u1

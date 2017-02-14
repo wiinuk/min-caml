@@ -471,11 +471,11 @@ let ilasm = env"windir"/"Microsoft.NET/Framework/v4.0.30319/ilasm.exe"
 
 Test.testOnce "inprod-loop" |> Async.RunSynchronously
 
-exe peverify "inprod-loop.ml.exe /verbose"
+exe peverify "matmul.ml.exe /verbose"
 
-exe ildasm "cls-reg-bug.ml.exe -TEXT"
+exe ildasm "matmul.ml.exe -text"
 
-exe ildasm "ack.ml.exe -text"
 exe ilasm "even-odd.il"
 
-exe ilasm "-help"
+exe "matmul.ml.exe" ""
+exe "matmul.fs.exe" ""
