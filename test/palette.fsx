@@ -327,41 +327,63 @@ module TreePrinter =
     Id.counter := 0
     Typing.extenv := M.empty
 
-Asm.tupleType (List.replicate 9 Asm.Int32)
-
-Id.counter := 0
-Typing.extenv := M.empty
-
+(
+    Id.counter := 0;
+    Typing.extenv := M.empty;
 "
-f(1,2,3,4,5,6,7,8,9)
-
+let t = 123 in
+let f = 456 in
+let rec even x =
+  let rec odd x =
+    if x > 0 then even (x - 1) else
+    if x < 0 then even (x + 1) else
+    f in
+  if x > 0 then odd (x - 1) else
+  if x < 0 then odd (x + 1) else
+  t in
+print_int (even 789)
 "
+)
 |> closure 1000
-
 // |> ClosurePrinter.prog |> String.concat ""
 (*
-f.9 : (int) => () (n.10 : int) {} =
-    Ti3.11 : int = 0
-    if Ti3.11 <= n.10 then
-        Tu1.12 : () = (min_caml_print_int : (int) => ())(n.10)
-        Ti4.14 : int = 1
-        a.13 : [(int) => ()] = (min_caml_create_array : (int, float) => [(int) => ()])(Ti4.14, f.9)
-        Ti5.16 : int = 0
-        Tf6.15 : (int) => () = a.13[Ti5.16]
-        Ti7.18 : int = 1
-        Ti8.17 : int = n.10 - Ti7.18
-        Tf6.15#(Ti8.17)
+odd.19 : (int) => int (x.20 : int) {} =
+    Ti9.21 : int = 0
+    if x.20 <= Ti9.21 then
+        Ti10.22 : int = 0
+        if Ti10.22 <= x.20 then
+            456
+        else
+            Ti11.24 : int = 1
+            Ti12.23 : int = x.20 + Ti11.24
+            even.17(Ti12.23)
     else
-        ()
+        Ti13.26 : int = 1
+        Ti14.25 : int = x.20 - Ti13.26
+        even.17(Ti14.25)
+even.17 : (int) => int (x.18 : int) {} =
+    Ti3.27 : int = 0
+    if x.18 <= Ti3.27 then
+        Ti4.28 : int = 0
+        if Ti4.28 <= x.18 then
+            123
+        else
+            Ti5.30 : int = 1
+            Ti6.29 : int = x.18 + Ti5.30
+            odd.19(Ti6.29)
+    else
+        Ti7.32 : int = 1
+        Ti8.31 : int = x.18 - Ti7.32
+        odd.19(Ti8.31)
 do
-    f.9 : (int) => () = f.9{}
-    Ti2.19 : int = 9
-    f.9#(Ti2.19)
+    Ti1.34 : int = 789
+    Ti2.33 : int = even.17(Ti1.34)
+    min_caml_print_int(Ti2.33)
 *)
 |> Tree.f
 |> StackAlloc.f
 
-// |> StackPrinter.prog |> String.concat ""
+|> TreePrinter.prog |> String.concat ""
 (*
 f.9 : (int) => () (n.10 : int) {} =
     if 0 <= n.10 then
@@ -381,8 +403,77 @@ do
 open ExtraOperators
 cd <| __SOURCE_DIRECTORY__/"bin/debug/sources"
 pwd
-Test.testOnce "ack" |> Async.RunSynchronously
-Test.testOnce "cls-rec" |> Async.RunSynchronously
+Test.testOnce "cls-reg-bug" |> Async.RunSynchronously
 
-let peverify = env"ProgramFiles"/"Microsoft SDKs/Windows/v10.0A/bin/NETFX 4.6.1 Tools/PEVerify.exe"
-exe peverify "adder.ml.exe"
+let peverify = env"ProgramFiles"/"Microsoft SDKs/Windows/v10.0A/bin/NETFX 4.6.1 Tools/peverify.exe"
+let ildasm = env"ProgramFiles"/"Microsoft SDKs/Windows/v10.0A/bin/NETFX 4.6.1 Tools/ildasm.exe"
+exe ildasm "-help"
+//Usage: ildasm [オプション] <ファイル名> [オプション]
+//
+//出力リダイレクトのオプションです:
+//  /OUT=<ファイル名>   GUI ではなくファイルに直接出力します。
+//  /TEXT               GUI ではなくコンソール ウィンドウに直接出力します。
+//
+//  /HTML               HTML 形式の出力です (/OUT オプションでのみ有効)。
+//  /RTF                リッチ テキスト形式の出力です (/TEXT オプションでは無効)。
+//GUI またはファイルのオプション/コンソール出力 (EXE および DLL ファイルのみ):
+//  /BYTES              命令コメントとして実際のバイト数を 16 進数で表示する。
+//  /RAWEH              例外処理句を raw 形式で表示します。
+//  /TOKENS             クラスおよびメンバーのメタデータ トークンを表示します。
+//  /SOURCE             コメントとして元のソース行を表示します。
+//  /LINENUM            元のソース行への参照を含みます。
+//  /VISIBILITY=<vis>[+<vis>...]    指定された可視性を持つアイテムのみを
+//                                  逆アセンブルします。
+//                                  (<vis> = PUB | PRI | FAM | ASM | FAA | FOA
+//                      | PSC) 
+//  /PUBONLY            パブリック アイテムのみを逆アセンブルします (/VIS=PUB と同
+//                      様)。
+//  /QUOTEALLNAMES      すべての名前を単一引用符内に含めます。
+//  /NOCA               カスタム属性を出力しません。
+//  /CAVERBAL           Verbal 形式で CA BLOB を出力します (既定 - バイナリ形式)。
+//  /NOBAR              逆アセンブル プログレス バー ポップアップ ウィンドウを
+//                      非表示にします。
+//
+//次のオプションはファイル/コンソール出力にのみ有効です:
+//EXE および DLL ファイルのオプション:
+//  /UTF8               出力 に UTF-8 エンコード (既定 - ANSI) を使用します。
+//  /UNICODE            出力に UNICODE エンコードを使用します。
+//  /NOIL               IL アセンブラー コード出力をしません。
+//  /FORWARD            事前のクラス宣言を使用します。
+//  /TYPELIST           型一覧を出力します (往復での型の順序付けを保存するため)。
+//  /PROJECT            入力が .winmd ファイルの場合に .NET プロジェクション ビューを表示します。
+//  /HEADERS            出力にファイルのヘッダー情報を含めます。
+//  /ITEM=<クラス名>[::<メソッド>[(<署名>)]  指定された項目のみを逆アセンブル
+//                                           します。
+//
+//  /STATS              イメージの統計を含めます。
+//  /CLASSLIST          モジュールで定義されたクラスの一覧を含めます。
+//  /ALL                /HEADER、/BYTES、/STATS、/CLASSLIST、/TOKENS の
+//                      コンビネーション
+//
+//EXE、DLL、OBJ、および LIB ファイルのオプション:
+//  /METADATA[=<指定子>] メタデータを表示します。<指定子> は次のとおりです:
+//          MDHEADER    メタデータのヘッダー情報とサイズを表示します。
+//          HEX         語句と同様に 16 進数でより多くのものを表示します。
+//          CSV         レコード数およびヒープ サイズを表示します。
+//          UNREX       未解決の外部参照を表示します。
+//          SCHEMA      メタデータ ヘッダーおよびスキーマ情報を表示します。
+//          RAW         未処理のメタデータ テーブルを表示します。
+//          HEAPS       生のヒープを表示します。
+//          VALIDATE    メタデータの一貫性を検査します。
+//LIB ファイルのみのオプション:
+//  /OBJECTFILE=<オブジェクト ファイル名> ライブラリの単一のオブジェクト 
+//                                        ファイルのメタデータを表示します。
+//
+//オプション キーは '-' または '/' です。オプションは最初の 3 文字で認識されます。
+//
+//例:    ildasm /tok /byt myfile.exe /out=myfile.il
+let ilasm = env"windir"/"Microsoft.NET/Framework/v4.0.30319/ilasm.exe"
+
+exe peverify "cls-reg-bug.ml.exe"
+exe peverify "cls-reg-bug.ml.exe /verbose"
+
+exe ildasm "cls-reg-bug.ml.exe -TEXT"
+
+exe ildasm "ack.ml.exe -text"
+exe ilasm "even-odd.il"

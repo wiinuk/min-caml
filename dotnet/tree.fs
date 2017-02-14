@@ -188,8 +188,8 @@ let rec expr env = function
         let fvs = List.map (fun v -> Id.L v, Var v) fvs
         MakeCls(xt1, { entry = l; actual_fv = fvs }, expr (Map.add x1 t1 env) e)
 
-let fundef env { P.name = Id.L l, t as name; P.args = args; P.formal_fv = formal_fv; P.body = body } =
-    let env = env |> Map.add l t |> addVars args |> addVars formal_fv
+let fundef env { P.name = name; P.args = args; P.formal_fv = formal_fv; P.body = body } =
+    let env = addVars args env |> addVars formal_fv
     {
         name = name
         args = args
@@ -198,10 +198,11 @@ let fundef env { P.name = Id.L l, t as name; P.args = args; P.formal_fv = formal
     }
 
 let f (P.Prog(fundefs, main)) =
-    let fundefs, env =
-        List.fold (fun (acc, env) ({ P.name = Id.L x, t } as f) ->
-            let env = Map.add x t env
-            fundef env f::acc, env
-        ) ([], Map.empty) fundefs
 
-    Prog(List.rev fundefs, expr env main)
+    // TODO: 関数 ( let rec ) は登録、値 ( let ) は登録しない
+    let env = List.fold (fun env { P.name = Id.L x, t } -> Map.add x t env) Map.empty fundefs
+
+    Prog(
+        List.map (fundef env) fundefs,
+        expr env main
+    )

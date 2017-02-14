@@ -5,7 +5,7 @@ open FSharp.Compatibility.OCaml
 let (+=) o s = output_string o s
 
 let newline oc i =
-    oc += "\n"
+    oc += "\r\n"
     for _ in 1..i do oc += "    "
 
 let groupCore emptyIfIgnore first emit sep last o = function
@@ -206,7 +206,13 @@ let accessNonNested = function
 //     )
 //     ...
 // }
-let methodBody i oc { isEntrypoint = isEntrypoint; locals = locals; opcodes = ops } =
+let methodBody i oc { maxStack = maxStack; isEntrypoint = isEntrypoint; locals = locals; opcodes = ops } =
+    match maxStack with
+    | None -> ()
+    | Some maxStack ->
+        newline oc i
+        fprintf oc ".maxstack %d" maxStack
+
     if isEntrypoint then
         newline oc i
         oc += ".entrypoint"
@@ -285,6 +291,7 @@ and classDef nested i oc
 
 let makeEntryPoint { name = n; resultType = resultType } =
     let body = {
+        maxStack = None
         isEntrypoint = true
         locals = Map.empty
         opcodes =
@@ -316,8 +323,14 @@ let makeEntryPoint { name = n; resultType = resultType } =
 let f oc (Prog(decls, e)) =
     eprintf "generating assembly...@."
 
-    fprintfn oc ".assembly mincaml_module_0 {}"
-    fprintfn oc ".assembly extern mscorlib {}"
+    // mscorlib は、System.Tuple`... が存在するバージョン 4.0.0.0 以上を指定
+    fprintfn oc ".assembly extern mscorlib"
+    fprintfn oc "{"
+    fprintfn oc "    .publickeytoken = (B7 7A 5C 56 19 34 E0 89)"
+    fprintfn oc "    .ver 4:0:0:0"
+    fprintfn oc "}"
+
+    fprintfn oc ".assembly MinCamlGlobal {}"
 
     fprintfn oc ".class public abstract sealed beforefieldinit %s" Virtual.topLevelTypeName
     oc += "{"

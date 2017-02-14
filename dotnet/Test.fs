@@ -2,7 +2,6 @@
 open ExtraOperators
 open Xunit
 
-let fsharpc = env"ProgramFiles"/"Microsoft SDKs/F#/4.0/Framework/v4.0/fsc.exe"
 //                 - 出力ファイル -
 // --out:<file>                   出力ファイルの名前 (短い形式: -o)
 // --target:exe                   コンソール実行可能ファイルをビルドします
@@ -70,7 +69,11 @@ let fsharpc = env"ProgramFiles"/"Microsoft SDKs/F#/4.0/Framework/v4.0/fsc.exe"
 // --subsystemversion:<string>    このアセンブリのサブシステム バージョンを指定してください
 // --targetprofile:<string>       このアセンブリのターゲット フレームワーク プロファイルを指定してください。有効な値は mscorlib または netcore です。既定 - mscorlib
 // --quotations-debug[+|-]        デバッグ情報を引用符で囲んで生成します
-let fsharpcOptions = "--nologo --mlcompatibility --nooptimizationdata --nointerfacedata --nowarn:0221"
+//
+// TODO: 参照先を nuget にする
+let fsharpc = env"ProgramFiles"/"Microsoft SDKs/F#/4.0/Framework/v4.0/fsc.exe"
+// TODO: 参照先を nuget にする
+let ilasm = env"windir"/"Microsoft.NET/Framework/v4.0.30319/ilasm.exe"
 
 let (@.) = path.changeExtension
 
@@ -81,8 +84,8 @@ let testOnce sourceML = async {
     [sourceIL; binaryML; binaryFS] % item.remove
 
     exe "min-caml" "%s" (sourceML@.null)
-    exe "ilasm" "-nologo -exe -output=%s libmincaml.il %s" binaryML sourceIL
-    exe fsharpc "%s -o:%s libmincaml.fs %s" fsharpcOptions binaryFS (sourceML@."ml")
+    exe ilasm "-nologo -exe -output=%s libmincaml.il %s" binaryML sourceIL
+    exe fsharpc "--nologo --mlcompatibility --nooptimizationdata --nointerfacedata --nowarn:0221 -o:%s libmincaml.fs %s" binaryFS (sourceML@."ml")
 
     let! resultMC = expression.invokeAsync binaryML ""
     let! resultFS = expression.invokeAsync binaryFS ""

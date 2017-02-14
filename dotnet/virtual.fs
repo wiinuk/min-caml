@@ -29,7 +29,60 @@ let topLevelType = TypeName(Class, [], [], [], topLevelTypeName, [])
 let entrypointName = Id.L "MinCamlEntryPoint"
 let localTypeToCliType (Id.L n) = TypeName(Class, [], [], [topLevelTypeName], n, [])
 
-let (++) xs x = x::xs
+type stack = {
+    stack: exp list
+    maxSize: int
+    size: int
+}
+
+let delta = function
+    | Label _
+    | Br _ -> 0
+
+    // -1 or 0
+    | Ret -> 0
+
+    | Ldloc _
+    | Ldarg0
+    | Ldarg _
+    | Ldnull
+    | LdcI4 _
+    | LdcR8 _
+    | Ldsfld _
+    | Ldftn _ -> 1
+
+    | Stloc _
+    | Pop -> -1
+
+    | Neg
+    | Ldfld _ -> -1 + 1
+
+    | Dup -> -1 + 2
+    
+    | BneUn _
+    | Bgt _
+    | Stfld _ -> -2
+
+    | Add
+    | Sub
+    | Mul
+    | Div
+    | Ldelem _ -> -2 + 1
+
+    | Stelem _ -> -3
+
+    | Call(_, { resultType = rt; argTypes = ts })
+    | Callvirt(_, { resultType = rt; argTypes = ts }) -> -(List.length ts) + Option.count rt
+    | Newobj(_, ts) -> -(List.length ts) + 1
+
+let (++) { stack = stack; maxSize = maxSize; size = size } x =
+    let size = size + delta x
+    {
+        stack = x::stack
+        maxSize = max maxSize size
+        size = size
+    }
+
 let (+>) x f = f x
 
 let private getArrayElement = function
@@ -334,7 +387,7 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
 
         acc
         +>nonTailMany ys env
-        ++Call(isTail && x = env.methodName, methodRef(Static, Some resultType, topLevelType, x, [], argTypes))
+        ++call(isTail && x = env.methodName, Static, Some resultType, topLevelType, x, argTypes)
         +>ret env
 
     // 組の生成 (caml2html: virtual_tuple)
@@ -344,31 +397,10 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
         // ︙
         //
         // newobj instance void class System.Tuple`…<…>::.ctor(…)
-
-        let rec makeTuple xs acc =
-            match tryTake 7 xs with
-            | None
-            | Some(_, []) ->
-                let types = List.map (P.typeof map env.vars >> cliType) xs
-                let tupleType = tupleType types
-                acc
-                +>nonTailMany xs env
-                ++Newobj(tupleType, types), tupleType
-
-            | Some(xs, tail) ->
-                let types = List.map (P.typeof map env.vars >> cliType) xs
-                let acc = acc+>nonTailMany xs env
-                let acc, tailType = makeTuple tail acc
-                let types = types @ [tailType]
-                let tupleType = tupleType types
-                acc
-                ++Newobj(tupleType, types), tupleType
-
         acc
-        +>(makeTuple xs >> fst)
+        +>(makeTuple env xs >> fst)
         +>ret env
 
-    // TODO: 8 要素以上の組
     // $(ld y)
     // dup
     //     call instance !0 class [mscorlib]System.Tuple`…<…>::get_Item…()
@@ -380,8 +412,6 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
     //
     // $e2
     | P.LetTuple(xts, y, e2) ->
-        let s = P.freeVars e2
-
         acc
         +>nonTail env y
         +>letTuple env xts e2
@@ -418,6 +448,26 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
 and nonTail env x = g { env with isTail = false } x
 and nonTailMany xs env acc = many xs (g { env with isTail = false }) acc
 
+and makeTuple ({ vars = vars } as env) xs acc =
+    match tryTake 7 xs with
+    | None
+    | Some(_, []) ->
+        let types = List.map (P.typeof map vars >> cliType) xs
+        let tupleType = tupleType types
+        let argTypes = List.mapi (fun i _ -> TypeArgmentIndex i) types
+        acc
+        +>nonTailMany xs env
+        ++Newobj(tupleType, argTypes), tupleType
+
+    | Some(xs, tail) ->
+        let types7 = List.map (P.typeof map vars >> cliType) xs
+        let acc = acc+>nonTailMany xs env
+        let acc, tailType = makeTuple env tail acc
+        let tupleType = TypeName(Class, ["mscorlib"], ["System"], [], "Tuple`8", types7 @ [tailType])
+        let argTypes8 = [for i in 0..7 -> TypeArgmentIndex i]
+        acc
+        ++Newobj(tupleType, argTypes8), tupleType
+
 and letTuple { usedLocals = locals } xts e2 acc =
     let s = P.freeVars e2
     let rec aux xts acc =
@@ -443,23 +493,25 @@ and letTuple { usedLocals = locals } xts e2 acc =
         if List.isEmpty tail then acc else
 
         acc
-        ++Dup
         ++getProp(Instance, TypeArgmentIndex 7, tupleType, "Rest")
         +>aux tail
 
     aux xts acc
+    ++Pop
 
-// TODO: .maxstack の計測
 let methodDef access callconv resultType name args formalFvs isEntrypoint env e =
     let env = List.fold (fun env (y, t) -> Map.add y (t, Arg) env) env args
     let env = List.fold (fun env (z, t) -> Map.add z (t, InstanceField) env) env formalFvs
 
     let locals = ref Map.empty
-    let opcodes = g { vars = env; isTail = true; usedLocals = locals; methodName = name } e [] |> List.rev
+    let env = { vars = env; isTail = true; usedLocals = locals; methodName = name }
+    let stack = { stack = []; maxSize = 8; size = 0 }
+    let { stack = opcodes; maxSize = maxStack } = g env e stack
     let body = {
+        maxStack = if maxStack <= 8 then None else Some maxStack
         isEntrypoint = isEntrypoint
         locals = !locals
-        opcodes = opcodes
+        opcodes = List.rev opcodes
     }
     {
         access = access
@@ -515,6 +567,8 @@ let compilerGenerated = {
 //    }
 // }
 let closureClass { P.name = Id.L x' as x, t; P.args = yts; P.formal_fv = zts; P.body = e } =
+    let (++) xs x = x::xs
+
     let funcType = cliType t
     let resultType = getFunctionElements t |> snd
     let acc =

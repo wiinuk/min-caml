@@ -130,6 +130,7 @@ and exp =
 
 type accesibility = Public | Default
 type method_body = {
+    maxStack: int option
     isEntrypoint: bool
 
     /// .locals init (...)
@@ -192,14 +193,15 @@ let ctorRef(declaringType, argTypes) = {
     methodName = Ctor
     argTypes = argTypes
 }
-let getProp(callconv, propertyType, declaringType, propertyName) =
-    Call(false, methodRef(callconv, Some propertyType, declaringType, Id.L("get_" + propertyName), [], []))
-
-let ldftn(resultType, declaringType, name, argTypes) =
-    Ldftn <| methodRef(Instance, resultType, declaringType, Id.L name, [], argTypes)
 
 let call(tail, callconv, resultType, declaringType, name, argTypes) =
     Call(tail, methodRef(callconv, resultType, declaringType, name, [], argTypes))
+
+let getProp(callconv, propertyType, declaringType, propertyName) =
+    call(false, callconv, Some propertyType, declaringType, Id.L("get_" + propertyName), [])
+
+let ldftn(resultType, declaringType, name, argTypes) =
+    Ldftn <| methodRef(Instance, resultType, declaringType, Id.L name, [], argTypes)
 
 let callvirt(tail, resultType, declaringType, name, argTypes) =
     Callvirt(tail, methodRef(Instance, resultType, declaringType, Id.L name, [], argTypes))
@@ -218,6 +220,7 @@ let ctorDef(access, args, isForwardref, body) = {
 
 let defaultCtor =
     let body = {
+        maxStack = None
         isEntrypoint = false
         locals = Map.empty
         opcodes =

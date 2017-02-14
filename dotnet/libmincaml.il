@@ -1,4 +1,8 @@
-.assembly extern mscorlib {}
+.assembly extern mscorlib
+{
+    .publickeytoken = (B7 7A 5C 56 19 34 E0 89)
+    .ver 4:0:0:0
+}
 
 .class public abstract sealed beforefieldinit MinCamlGlobal
 {
@@ -79,7 +83,7 @@
     )
     cil managed
     {
-		call string [mscorlib]System.Console::ReadLine()
+        call string [mscorlib]System.Console::ReadLine()
         call int32 [mscorlib]System.Int32::Parse(string)
         ret
     }
@@ -89,7 +93,7 @@
     )
     cil managed
     {
-		call string [mscorlib]System.Console::ReadLine()
+        call string [mscorlib]System.Console::ReadLine()
         call float64 [mscorlib]System.Double::Parse(string)
         ret
     }
@@ -99,43 +103,43 @@
         !!T x
     )
     cil managed
-	{
-		.maxstack 5
-		.locals init (
-			[0] !!T[] xs,
-			[1] int32,
-			[2] int32 i
-		)
+    {
+        .maxstack 5
+        .locals init (
+            [0] !!T[] xs,
+            [1] int32,
+            [2] int32 i
+        )
 
-		ldarg.0
-		newarr !!T
-		stloc.0
-		ldc.i4.0
-		stloc.2
-		ldarg.0
-		ldc.i4.1
-		sub
-		stloc.1
-		ldloc.1
-		ldloc.2
-		blt.s finish
-			loopHead: ldloc.0
-			ldloc.2
-			ldarg.1
-			stelem.any !!T
-			ldloc.2
-			ldc.i4.1
-			add
-			stloc.2
-			ldloc.2
-			ldloc.1
-			ldc.i4.1
-			add
-			bne.un.s loopHead
+        ldarg.0
+        newarr !!T
+        stloc.0
+        ldc.i4.0
+        stloc.2
+        ldarg.0
+        ldc.i4.1
+        sub
+        stloc.1
+        ldloc.1
+        ldloc.2
+        blt.s finish
+            loopHead: ldloc.0
+            ldloc.2
+            ldarg.1
+            stelem.any !!T
+            ldloc.2
+            ldc.i4.1
+            add
+            stloc.2
+            ldloc.2
+            ldloc.1
+            ldc.i4.1
+            add
+            bne.un.s loopHead
 
-		finish: ldloc.0
-		ret
-	}
+        finish: ldloc.0
+        ret
+    }
 
     .method public static float64[] min_caml_create_float_array(
         int32 n,
