@@ -307,7 +307,7 @@ module TreePrinter =
         yield! exp (i + 1) e2
     }
 
-    let fundef { name = Id.L name, t; args = args; formal_fv = formal_fv; body = body } = seq {
+    let fundef { name = Id.L name, t; args = args; formalFreeVars = formal_fv; body = body } = seq {
         yield! typed (name, t)
         yield " "
         yield! List.map typed args |> wrapTuple
@@ -336,46 +336,48 @@ module TreePrinter =
     Id.counter := 0;
     Typing.extenv := M.empty;
 "
-let rec make m n = Array.make m (Array.make n 0.) in
-let a = make 2 3 in
-a.(0).(0) <- 1.;
-a.(0).(1) <- 2.
+let x = 10 in
+let rec f y =
+  if y = 0 then 0 else
+  x + f (y - 1) in
+print_int (f 123)
+
 "
 )
 |> closure 1000
 // |> ClosurePrinter.prog |> String.concat ""
 (*
-make.14 : (int, int) => [[float]] (m.15 : int, n.16 : int) {} =
-    Td12.18 : float = 0
-    Ta13.17 : [float] = min_caml_create_float_array(n.16, Td12.18)
-    min_caml_create_array(m.15, Ta13.17)
+f.8 : (int) => int (y.9 : int) {x.7 : int} =
+    Ti3.10 : int = 0
+    if y.9 == Ti3.10 then
+        0
+    else
+        Ti4.13 : int = 1
+        Ti5.12 : int = y.9 - Ti4.13
+        Ti6.11 : int = f.8#(Ti5.12)
+        x.7 + Ti6.11
 do
-    Ti2.20 : int = 2
-    Ti3.21 : int = 3
-    a.19 : [[float]] = make.14(Ti2.20, Ti3.21)
-    Ti4.24 : int = 0
-    Ta5.23 : [float] = a.19[Ti4.24]
-    Ti6.25 : int = 0
-    Td7.26 : float = 1
-    Tu1.22 : () = Ta5.23[Ti6.25] <- Td7.26
-    Ti8.28 : int = 0
-    Ta9.27 : [float] = a.19[Ti8.28]
-    Ti10.29 : int = 1
-    Td11.30 : float = 2
-    Ta9.27[Ti10.29] <- Td11.30
+    x.7 : int = 10
+    f.8 : (int) => int = f.8{x.7}
+    Ti1.15 : int = 123
+    Ti2.14 : int = f.8#(Ti1.15)
+    min_caml_print_int(Ti2.14)
 *)
 |> Tree.f
 |> StackAlloc.f
 
 // |> TreePrinter.prog |> String.concat ""
 (*
-make.14 : (int, int) => [[float]] (m.15 : int, n.16 : int) {} =
-    Ta13.17 : [float] = (min_caml_create_float_array : (int) => [float])(n.16, 0)
-    (min_caml_create_array : (int) => [[float]])(m.15, Ta13.17)
+f.8 : (int) => int (y.9 : int) {x.7 : int} =
+    if y.9 == 0 then
+        0
+    else
+        Ti6.11 : int = f.8#(y.9 - 1)
+        x.7 + Ti6.11
 do
-    a.19 : [[float]] = (make.14 : (int, int) => [[float]])(2, 3)
-    a.19[0][0] <- 1
-    a.19[0][1] <- 2
+    f.8 : (int) => int = f.8{x.7 = 10}
+    Ti2.14 : int = f.8#(123)
+    (min_caml_print_int : (int) => ())(Ti2.14)
 *)
 |> Virtual.f'
 |> emit
@@ -452,9 +454,12 @@ let ilasm = env"windir"/"Microsoft.NET/Framework/v4.0.30319/ilasm.exe"
 
 Test.testOnce "inprod-loop" |> Async.RunSynchronously
 
-exe peverify "matmul.ml.exe /verbose"
+childItem.get "*.ml.exe"
+    % exe peverify "%A /verbose"
 
-exe ildasm "matmul.ml.exe -text"
+exe ildasm "cls-rec.ml.exe -text"
+exe peverify "cls-rec.ml.exe /verbose"
+
 
 exe ilasm "libmincaml.il matmul.il -out=matmul.ml.exe"
 

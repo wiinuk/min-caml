@@ -47,7 +47,8 @@ and t =
 type fundef = {
     name: Id.l * Type.t
     args: (Id.t * Type.t) list
-    formal_fv: (Id.t * Type.t) list
+    useSelf: bool
+    formalFreeVars: (Id.t * Type.t) list
     body: t
 }
 type prog = Prog of fundef list * t
@@ -191,12 +192,14 @@ let rec expr env = function
         let fvs = List.map (fun v -> Id.L v, Var v) fvs
         MakeCls(xt1, { entry = l; actual_fv = fvs }, expr (Map.add x1 t1 env) e)
 
-let fundef env { P.name = name; P.args = args; P.formal_fv = formal_fv; P.body = body } =
+let fundef env { P.name = Id.L x, t as name; P.args = args; P.formal_fv = formal_fv; P.body = body } =
     let env = addVars args env |> addVars formal_fv
+    let useSelf = Set.contains x <| P.fv body
     {
         name = name
         args = args
-        formal_fv = formal_fv
+        useSelf = useSelf
+        formalFreeVars = formal_fv
         body = expr env body
     }
 

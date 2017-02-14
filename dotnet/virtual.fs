@@ -16,6 +16,7 @@ type location =
     | StaticMethodSelf
 
 type env = {
+    fundefs: Map<Id.l, P.fundef>
     vars: Map<Id.t, Type.t * location>
     isTail: bool
     methodName: Id.l
@@ -233,7 +234,6 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
         acc+>g { env with vars = Map.add x (t, Local) vars } e2
 
     // TODO: デリゲートをキャッシュして使いまわす
-    // TODO: this へのアクセスが無いなら、this のフィールドを作成しない
     // インスタンスメソッドから Func<…> を作成
     | P.MakeCls((x, t), { P.entry = l; P.actual_fv = ys }, e2) ->
         // [mincaml|let $x : $($ts -> $r) = let rec $l … = … $ys … in $e2|]
@@ -333,14 +333,23 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
             ++Dup
             ++Ldftn(methodRef(Instance, Some resultType, closuleType, Id.L "Invoke", [], argTypes))
             ++Newobj(funcType, [Object; NativeInt])
-
             ++Stloc x
-            ++Ldloc x
-            ++Stfld {
-                fieldType = funcType
-                declaringType = closuleType
-                name = Id.L x
-            }
+
+        let acc =
+            let { P.useSelf = useSelf } = Map.find l env.fundefs
+            if useSelf then
+                acc
+                ++Ldloc x
+                ++Stfld {
+                    fieldType = funcType
+                    declaringType = closuleType
+                    name = Id.L x
+                }
+            else
+                acc
+
+                // TODO: 不要な Pop をなくす
+                ++Pop
 
         locals := Map.add x t !locals
         g { env with vars = Map.add x (t, Local) vars } e2 acc
@@ -505,12 +514,12 @@ and letTuple { usedLocals = locals } xts e2 acc =
     aux xts acc
     ++Pop
 
-let methodDef access callconv resultType name args formalFvs isEntrypoint env e =
+let methodDef fundefs access callconv resultType name args formalFvs isEntrypoint env e =
     let env = List.fold (fun env (y, t) -> Map.add y (t, Arg) env) env args
     let env = List.fold (fun env (z, t) -> Map.add z (t, InstanceField) env) env formalFvs
 
     let locals = ref Map.empty
-    let env = { vars = env; isTail = true; usedLocals = locals; methodName = name }
+    let env = { fundefs = fundefs; vars = env; isTail = true; usedLocals = locals; methodName = name }
     let stack = { stack = []; maxSize = 8; size = 0 }
     let { stack = opcodes; maxSize = maxStack } = g env e stack
     let body = {
@@ -572,7 +581,7 @@ let compilerGenerated = {
 //      ret
 //    }
 // }
-let closureClass { P.name = Id.L x' as x, t; P.args = yts; P.formal_fv = zts; P.body = e } =
+let closureClass fundefs { P.name = Id.L x' as x, t; P.args = yts; P.useSelf = useSelf; P.formalFreeVars = zts; P.body = e } =
     let (++) xs x = x::xs
 
     let funcType = cliType t
@@ -580,11 +589,17 @@ let closureClass { P.name = Id.L x' as x, t; P.args = yts; P.formal_fv = zts; P.
     let acc =
         []
         ++Custom compilerGenerated
-        ++Field { access = Public; fieldType = funcType; name = x }
+
+    let acc =
+        if useSelf then acc++Field { access = Public; fieldType = funcType; name = x }
+        else acc
+
+    let acc =
+        acc
         +>many zts (fun (z, y) acc ->
             acc++Field { access = Public; fieldType = cliType y; name = Id.L z }
         )
-        ++Method(methodDef Public Instance resultType (Id.L "Invoke") yts ((x', t)::zts) false Map.empty e)
+        ++Method(methodDef fundefs Public Instance resultType (Id.L "Invoke") yts ((x', t)::zts) false Map.empty e)
         ++Method defaultCtor
     {
         isSealed = true
@@ -608,21 +623,22 @@ let closureClass { P.name = Id.L x' as x, t; P.args = yts; P.formal_fv = zts; P.
 //     )
 //     $e
 // }
-let staticMethod { P.name = Id.L x' as x, t; P.args = yts; P.body = e } =
+let staticMethod fundefs { P.name = Id.L x' as x, t; P.args = yts; P.body = e } =
     let resultType = getFunctionElements t |> snd
     let env = Map.add x' (t, StaticMethodSelf) Map.empty
-    methodDef Public Static resultType x yts [] false env e
+    methodDef fundefs Public Static resultType x yts [] false env e
 
 /// 関数の仮想マシンコード生成 (caml2html: virtual_h)
-let h = function
-    | { P.formal_fv = [] } as f -> Method <| staticMethod f
-    | f -> NestedClass <| closureClass f
+let h fundefs = function
+    | { P.formalFreeVars = [] } as f -> Method <| staticMethod fundefs f
+    | f -> NestedClass <| closureClass fundefs f
 
 let f' (P.Prog(fundefs, e)) =
-    let fundefs = List.map h fundefs
+    let env = List.fold (fun env ({ P.name = name, _ } as f) -> Map.add name f env) Map.empty fundefs
+    let fundefs = List.map (h env) fundefs
     Prog(
         fundefs,
-        methodDef Public Static Type.Unit entrypointName [] [] false Map.empty e
+        methodDef env Public Static Type.Unit entrypointName [] [] false Map.empty e
     )
 
 /// プログラム全体の仮想マシンコード生成 (caml2html: virtual_f)

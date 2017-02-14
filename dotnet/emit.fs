@@ -30,7 +30,6 @@ let group first emit sep last o xs = groupCore false first emit sep last o xs
 let hexByte w x = fprintf w "%02x" x
 let wrapBytes w xs = group "(" hexByte " " ")" w xs
 
-// TODO: エスケープ処理
 let name oc = function
     | "" -> oc += "''"
     | x ->
