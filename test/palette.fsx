@@ -383,7 +383,7 @@ do
 |> Tree.f
 |> StackAlloc.f
 
-|> TreePrinter.prog |> String.concat ""
+// |> TreePrinter.prog |> String.concat ""
 (*
 f.9 : (int) => () (n.10 : int) {} =
     if 0 <= n.10 then
@@ -470,10 +470,11 @@ exe ildasm "-help"
 //例:    ildasm /tok /byt myfile.exe /out=myfile.il
 let ilasm = env"windir"/"Microsoft.NET/Framework/v4.0.30319/ilasm.exe"
 
-exe peverify "cls-reg-bug.ml.exe"
-exe peverify "cls-reg-bug.ml.exe /verbose"
+exe peverify "float.ml.exe /verbose"
 
 exe ildasm "cls-reg-bug.ml.exe -TEXT"
 
 exe ildasm "ack.ml.exe -text"
 exe ilasm "even-odd.il"
+
+exe ilasm "-help"

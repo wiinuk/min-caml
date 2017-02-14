@@ -101,10 +101,6 @@
       <Link>sources\fib.ml</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Compile>
-    <Compile Include="float.ml">
-      <Link>sources\float.ml</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Compile>
     <Compile Include="funcomp.ml">
       <Link>sources\funcomp.ml</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -236,6 +232,13 @@
       <HintPath>..\packages\xunit.extensibility.execution.2.1.0\lib\net45\xunit.execution.desktop.dll</HintPath>
       <Private>True</Private>
     </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\dotnet\MinCaml.Compiler.Cli\MinCaml.Compiler.Cli.fsproj">
+      <Name>MinCaml.Compiler.Cli</Name>
+      <Project>{e9f98836-dc5c-4135-a8c4-1de3c257980e}</Project>
+      <Private>True</Private>
+    </ProjectReference>
   </ItemGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

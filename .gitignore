@@ -1,9 +1,34 @@
 ﻿# visual studio user-specific files
 *.suo
+*.user
+*.userosscache
+*.sln.docstates
 
 # visual studio build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+bld/
 [Bb]in/
 [Oo]bj/
 
 # nuget packages
-packages/
+*.nupkg
+**/packages/*
+!**/packages/build/
+*.nuget.props
+*.nuget.targets
+
+# Visual C++ cache files
+ipch/
+*.aps
+*.ncb
+*.opendb
+*.opensdf
+*.sdf
+*.cachefile
+*.VC.db
+*.VC.VC.opendb
