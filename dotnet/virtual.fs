@@ -143,6 +143,7 @@ let map = {
 /// 式の仮想マシンコード生成 (caml2html: virtual_g)
 let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
     match x with
+    // TODO: 可能ならば unit型 を void に unit値 を Nop に置き換える
     | P.Unit -> acc++Ldnull+>ret env
     | P.Int i -> acc++LdcI4 i+>ret env
     | P.Float d -> acc++LdcR8 d+>ret env
@@ -438,6 +439,8 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
         +>nonTail env y
         +>nonTail env z
         ++Stelem(P.typeof map env.vars z)
+        ++Ldnull
+        +>ret env
 
     // .field public static int32[] $x
     //
