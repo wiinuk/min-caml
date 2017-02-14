@@ -403,7 +403,6 @@ do
 open ExtraOperators
 cd <| __SOURCE_DIRECTORY__/"bin/debug/sources"
 pwd
-Test.testOnce "cls-reg-bug" |> Async.RunSynchronously
 
 let peverify = env"ProgramFiles"/"Microsoft SDKs/Windows/v10.0A/bin/NETFX 4.6.1 Tools/peverify.exe"
 let ildasm = env"ProgramFiles"/"Microsoft SDKs/Windows/v10.0A/bin/NETFX 4.6.1 Tools/ildasm.exe"
@@ -470,7 +469,9 @@ exe ildasm "-help"
 //例:    ildasm /tok /byt myfile.exe /out=myfile.il
 let ilasm = env"windir"/"Microsoft.NET/Framework/v4.0.30319/ilasm.exe"
 
-exe peverify "float.ml.exe /verbose"
+Test.testOnce "inprod-loop" |> Async.RunSynchronously
+
+exe peverify "inprod-loop.ml.exe /verbose"
 
 exe ildasm "cls-reg-bug.ml.exe -TEXT"
 

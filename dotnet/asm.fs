@@ -194,11 +194,11 @@ let ctorRef(declaringType, argTypes) = {
     argTypes = argTypes
 }
 
-let call(tail, callconv, resultType, declaringType, name, argTypes) =
-    Call(tail, methodRef(callconv, resultType, declaringType, name, [], argTypes))
+let call(tail, callconv, resultType, declaringType, name, typeArgs, argTypes) =
+    Call(tail, methodRef(callconv, resultType, declaringType, name, typeArgs, argTypes))
 
 let getProp(callconv, propertyType, declaringType, propertyName) =
-    call(false, callconv, Some propertyType, declaringType, Id.L("get_" + propertyName), [])
+    call(false, callconv, Some propertyType, declaringType, Id.L("get_" + propertyName), [], [])
 
 let ldftn(resultType, declaringType, name, argTypes) =
     Ldftn <| methodRef(Instance, resultType, declaringType, Id.L name, [], argTypes)

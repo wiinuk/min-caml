@@ -364,17 +364,18 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
         )
         +>ret env
 
-    // $(ld ys.[0])
-    // $(ld ys.[1])
-    // ︙
-    //
-    // call !0[] $topLevelType::$x
     | P.AppDir((Id.L "min_caml_create_array" as x, t), ys) ->
         let elementType = getFunctionElements t |> snd |> getArrayElement |> cliType
         let et = MethodArgmentIndex 0
         acc
         +>nonTailMany ys env
-        ++Call(false, methodRef(Static, Some (Array et), topLevelType, x, [elementType], [Int32; et]))
+        ++call(false, Static, Some (Array et), topLevelType, x, [elementType], [Int32; et])
+        +>ret env
+
+    | P.AppDir((Id.L "min_caml_create_float_array" as x, _), ys) ->
+        acc
+        +>nonTailMany ys env
+        ++call(false, Static, Some (Array Float64), topLevelType, x, [], [Int32; Float64])
         +>ret env
 
     // $(ld ys.[0])
@@ -387,7 +388,7 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
 
         acc
         +>nonTailMany ys env
-        ++call(isTail && x = env.methodName, Static, Some resultType, topLevelType, x, argTypes)
+        ++call(isTail && x = env.methodName, Static, Some resultType, topLevelType, x, [], argTypes)
         +>ret env
 
     // 組の生成 (caml2html: virtual_tuple)
