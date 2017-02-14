@@ -181,6 +181,8 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
 
     | P.Var x -> acc+>ld env x+>ret env
 
+    | P.Seq(e1, e2) -> nonTail env e1 acc++Pop+>g env e2
+
     // $e1
     // stloc $x
     // $e2

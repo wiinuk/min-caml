@@ -6,7 +6,7 @@ let isOneOrZero k e =
         | Unit | Int _ | Float _ | ExtArray _ -> 0
         | Var x -> if k = x then 1 else 0
 
-        | Binary(e1, _, e2) | Get(e1, e2) | Let(_, e1, e2) | LetTuple(_, e1, e2) -> countMany [e1; e2]
+        | Binary(e1, _, e2) | Get(e1, e2) | Let(_, e1, e2) | LetTuple(_, e1, e2) | Seq(e1, e2) -> countMany [e1; e2]
         | Unary(_, e) -> count e
 
         | Condition(e1, _, e2, e3, e4) -> countMany [e1; e2; e3; e4]
@@ -25,30 +25,46 @@ let isOneOrZero k e =
 
     count e <= 1
 
-let rec isPure = function
-    | Unit | Int _ | Float _ | Var _ | ExtArray _ -> true
-    | AppCls _ | AppDir _ | Put _ -> false
+type cost = LiteralLike | PureOperation | NoPure
+
+let rec cost = function
+    | Unit | Int _ | Float _ | Var _ | ExtArray _ -> LiteralLike
+    | AppCls _ | AppDir _ | Put _ -> NoPure
 
     | Binary(e1, _, e2)
     | Let(_, e1, e2)
     | LetTuple(_, e1, e2)
-    | Get(e1, e2) -> isPure e1 && isPure e2
+    | Get(e1, e2)
+    | Seq(e1, e2) -> manyCost PureOperation [e1; e2]
+    | Unary(_, e1) -> manyCost PureOperation [e1]
+    | MakeCls(_, { actual_fv = les }, e1) -> List.map snd les@[e1] |> manyCost PureOperation
 
-    | Unary(_, e1) -> isPure e1
-    | MakeCls(_, { actual_fv = les }, e1) -> List.forall (snd >> isPure) les && isPure e1
-    | Condition(e1, _, e2, e3, e4) -> isPure e1 && isPure e2 && isPure e3 && isPure e4
-    | Tuple es -> List.forall isPure es
+    | Condition(e1, _, e2, e3, e4) -> manyCost PureOperation [e1; e2; e3; e4]
+    | Tuple es -> manyCost PureOperation es
+
+and manyCost acc xs =
+    let rec aux acc = function
+        | [] -> acc
+        | e::es ->
+            match max acc (cost e) with
+            | NoPure -> NoPure
+            | acc -> aux acc es
+    aux acc xs
 
 let rec expr map = function
     | Let((x1, t1), e1, scope) ->
         let e1 = expr map e1
-        if isOneOrZero x1 scope && isPure e1
-        then expr (Map.add x1 e1 map) scope
-        else Let((x1, t1), expr map e1, expr map scope)
+        match cost e1 with
+        | LiteralLike
+        | PureOperation when isOneOrZero x1 scope -> expr (Map.add x1 e1 map) scope
+        | _ when t1 = Type.Unit -> Seq(e1, expr (Map.add x1 Unit map) scope)
+        | _ -> Let((x1, t1), expr map e1, expr map scope)
 
     | Var x as e -> if Map.containsKey x map then Map.find x map else e
 
     | Unit | Int _ | Float _ | ExtArray _ as e -> e
+
+    | Seq(e1, e2) -> Seq(expr map e1, expr map e2)
 
     | Unary(op, e) -> Unary(op, expr map e)
     | Binary(e1, op, e2) -> Binary(expr map e1, op, expr map e2)

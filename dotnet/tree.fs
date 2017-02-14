@@ -33,6 +33,7 @@ and t =
     | Binary of t * binary * t
     | Condition of t * condition * t * t * t
     | Let of (Id.t * Type.t) * t * t
+    | Seq of t * t
     | Var of Id.t
     | MakeCls of (Id.t * Type.t) * closure * t
     | AppCls of t * t list
@@ -69,6 +70,7 @@ let rec typeof map env = function
 
     | Unary(_, e)
     | Binary(e, _, _)
+    | Seq(_, e)
     | Condition(_, _, _, e, _) -> typeof map env e
 
     | Get(e, _) ->
@@ -98,7 +100,8 @@ let rec freeVars = function
 
     | Unary(_, e) -> freeVars e
     | Binary(e1, _, e2)
-    | Get(e1, e2) -> freeVars e1 + freeVars e2
+    | Get(e1, e2)
+    | Seq(e1, e2) -> freeVars e1 + freeVars e2
     | Put(e1, e2, e3) -> freeVars e1 + freeVars e2 + freeVars e3
     | AppCls(e, es) -> freeVars e + Set.unionMany (Seq.map freeVars es)
     | Condition(e1, _, e2, e3, e4) -> freeVars e1 + freeVars e2 + freeVars e3 + freeVars e4
