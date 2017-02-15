@@ -1,6 +1,5 @@
 module Emit
 open Asm
-open FSharp.Compatibility.OCaml
 open System
 
 let (+=) o s = output_string o s

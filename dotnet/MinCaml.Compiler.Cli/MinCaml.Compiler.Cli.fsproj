@@ -79,18 +79,6 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <Reference Include="FSharp.Compatibility.OCaml">
-      <HintPath>..\..\packages\FSharp.Compatibility.OCaml.0.2.0\lib\net40\FSharp.Compatibility.OCaml.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="FSharp.Compatibility.OCaml.LexYacc">
-      <HintPath>..\..\packages\FSharp.Compatibility.OCaml.LexYacc.0.2.0\lib\net40\FSharp.Compatibility.OCaml.LexYacc.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="FSharp.Compatibility.OCaml.System">
-      <HintPath>..\..\packages\FSharp.Compatibility.OCaml.System.0.2.0\lib\net40\FSharp.Compatibility.OCaml.System.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
     <Reference Include="FSharp.Core">
       <HintPath>..\..\packages\FSharp.Core.4.0.0.1\lib\net40\FSharp.Core.dll</HintPath>
       <Private>True</Private>

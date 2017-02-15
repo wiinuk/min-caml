@@ -73,8 +73,16 @@
       <Link>sources\libmincaml.fs</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Compile>
-    <None Include="..\packages\FSharp.Core.3.0.2\lib\net40\FSharp.Core.dll">
+    <None Include="..\packages\FSharp.Core.4.0.0.1\lib\net40\FSharp.Core.dll">
       <Link>sources\FSharp.Core.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\packages\FSharp.Core.4.0.0.1\lib\net40\FSharp.Core.optdata">
+      <Link>sources\FSharp.Core.optdata</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\packages\FSharp.Core.4.0.0.1\lib\net40\FSharp.Core.sigdata">
+      <Link>sources\FSharp.Core.sigdata</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <Compile Include="cls-bug.ml">
@@ -202,15 +210,11 @@
     </Compile>
     <None Include="palette.fsx" />
     <Content Include="packages.config" />
+    <Compile Include="Arg.Test.fs" />
   </ItemGroup>
   <ItemGroup>
-    <Reference Include="FSharp.Compatibility.OCaml">
-      <HintPath>..\packages\FSharp.Compatibility.OCaml.0.2.0\lib\net40\FSharp.Compatibility.OCaml.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
     <Reference Include="FSharp.Core">
-      <HintPath>..\packages\FSharp.Core.3.0.2\lib\net40\FSharp.Core.dll</HintPath>
-      <Private>True</Private>
+      <HintPath>..\packages\FSharp.Core.4.0.0.1\lib\net40\FSharp.Core.dll</HintPath>
     </Reference>
     <Reference Include="mscorlib" />
     <Reference Include="System" />
@@ -237,6 +241,11 @@
     <ProjectReference Include="..\dotnet\MinCaml.Compiler.Cli\MinCaml.Compiler.Cli.fsproj">
       <Name>MinCaml.Compiler.Cli</Name>
       <Project>{e9f98836-dc5c-4135-a8c4-1de3c257980e}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\MinCaml.Compiler.Ast.fsproj">
+      <Name>MinCaml.Compiler.Ast</Name>
+      <Project>{3d7efd39-b8de-48b7-9e3b-9c1cc1449336}</Project>
       <Private>True</Private>
     </ProjectReference>
   </ItemGroup>

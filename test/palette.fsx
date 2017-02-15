@@ -1,6 +1,4 @@
 ﻿#r "../dotnet/MinCaml.Compiler.Cli/bin/debug/FsLexYacc.Runtime.dll"
-#r "../dotnet/MinCaml.Compiler.Cli/bin/debug/FSharp.Compatibility.OCaml.dll"
-#r "../dotnet/MinCaml.Compiler.Cli/bin/debug/FSharp.Compatibility.OCaml.LexYacc.dll"
 #r "../dotnet/MinCaml.Compiler.Cli/bin/debug/MinCaml.Compiler.Ast.dll"
 #r "../dotnet/MinCaml.Compiler.Cli/bin/debug/MinCaml.Compiler.Cli.dll"
 
@@ -452,10 +450,12 @@ exe ildasm "-help"
 //例:    ildasm /tok /byt myfile.exe /out=myfile.il
 let ilasm = env"windir"/"Microsoft.NET/Framework/v4.0.30319/ilasm.exe"
 
-Test.testOnce "inprod-loop" |> Async.RunSynchronously
+Test.testOnce "ack" |> Async.RunSynchronously
 
 childItem.get "*.ml.exe"
     % exe peverify "%A /verbose"
+
+exe "min-caml" "ack"
 
 exe ildasm "cls-rec.ml.exe -text"
 exe peverify "cls-rec.ml.exe /verbose"
