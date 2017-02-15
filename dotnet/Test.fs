@@ -69,9 +69,7 @@ open Xunit
 // --subsystemversion:<string>    このアセンブリのサブシステム バージョンを指定してください
 // --targetprofile:<string>       このアセンブリのターゲット フレームワーク プロファイルを指定してください。有効な値は mscorlib または netcore です。既定 - mscorlib
 // --quotations-debug[+|-]        デバッグ情報を引用符で囲んで生成します
-//
-// TODO: 参照先を nuget にする
-let fsharpc = env"ProgramFiles"/"Microsoft SDKs/F#/4.0/Framework/v4.0/fsc.exe"
+let fsharpc = "../../../../packages/FSharp.Compiler.Tools.4.0.1.21/tools/fsc.exe"
 // TODO: 参照先を nuget にする
 let ilasm = env"windir"/"Microsoft.NET/Framework/v4.0.30319/ilasm.exe"
 
