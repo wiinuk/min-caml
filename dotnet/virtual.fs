@@ -252,11 +252,12 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
         // }
         //
         // var @temp_x = new $l();
+        // var $x = new Func<…>(@temp_x.Invoke);
+        //
         // @temp_x.$(name ys.[0]) = $(expr ys.[0]);
         // @temp_x.$(name ys.[1]) = $(expr ys.[1]);
         // ︙
         //
-        // var $x = new Func<…>(@temp_x.Invoke);
         // @temp_x.$x = $x;
         //
         // $e2
@@ -278,7 +279,15 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
         //     }
         // }
         //
-        // newobj instance void $l::.ctor()
+        // newobj instance void $l::.ctor() // $l
+        // dup // $l; $l
+        // ldftn instance $r $l::Invoke($(ts.[0]), $(ts.[1]), …) // $l; $l; ((…) => $r)*
+        // newobj instance void class [mscorlib]System.Func`…<$(ts.[0]), $(ts.[1]), …, $r>::.ctor(object, native int) // $l; Func`…<…>
+        // stloc $x // $l
+        //
+        // dup // $l; $l
+        //     ldloc $x // $l; $l; Func`…<…>
+        //     stfld class [mscorlib]System.Func`…<$(ts.[0]), $(ts.[1]), …, $r> $l::$x // $l
         //
         // dup
         //     $(expr ys.[0])
@@ -288,14 +297,7 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
         //     stfld $(typeof ys.[1]) $l::$(name ys.[1])
         // ︙
         //
-        // dup
-        // dup
-        // ldftn instance $r $l::Invoke($(ts.[0]), $(ts.[1]), …)
-        // newobj instance void class [mscorlib]System.Func`…<$(ts.[0]), $(ts.[1]), …, $r>::.ctor(object, native int)
-        //
-        // stloc $x
-        // ldloc $x
-        // stfld class [mscorlib]System.Func`…<$(ts.[0]), $(ts.[1]), …, $r> $l::$x
+        // pop
         //
         // $e2
         // |]
@@ -307,17 +309,8 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
         let acc =
             acc
             ++Newobj(closuleType, [])
-            +>many ys (fun (y, e) acc ->
-                acc
-                ++Dup
-                +>nonTail env e
-                ++Stfld {
-                    fieldType = cliType <| P.typeof map vars e
-                    declaringType = closuleType
-                    name = y
-                }
-            )
-
+            ++Dup
+            
             // ECMA-335 2012 Ⅲ.4.21
             //
             // デリゲートを作成する時の正当性検証可能な CIL コード
@@ -330,15 +323,16 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
             //
             // ldftn $function
             // newobj $ctor
-            ++Dup
             ++Ldftn(methodRef(Instance, Some resultType, closuleType, Id.L "Invoke", [], argTypes))
             ++Newobj(funcType, [Object; NativeInt])
+
             ++Stloc x
 
         let acc =
             let { P.useSelf = useSelf } = Map.find l env.fundefs
             if useSelf then
                 acc
+                ++Dup
                 ++Ldloc x
                 ++Stfld {
                     fieldType = funcType
@@ -348,8 +342,19 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
             else
                 acc
 
-                // TODO: 不要な Pop をなくす
-                ++Pop
+        let acc =
+            acc
+            +>many ys (fun (y, e) acc ->
+                acc
+                ++Dup
+                +>nonTail env e
+                ++Stfld {
+                    fieldType = cliType <| P.typeof map vars e
+                    declaringType = closuleType
+                    name = y
+                }
+            )
+            ++Pop
 
         locals := Map.add x t !locals
         g { env with vars = Map.add x (t, Local) vars } e2 acc
