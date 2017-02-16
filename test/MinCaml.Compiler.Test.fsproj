@@ -211,6 +211,9 @@
     <None Include="palette.fsx" />
     <Content Include="packages.config" />
     <Compile Include="Arg.Test.fs" />
+    <Compile Include="..\dotnet\dynamicAssembly.fs">
+      <Link>dynamicAssembly.fs</Link>
+    </Compile>
   </ItemGroup>
   <ItemGroup>
     <Reference Include="FSharp.Core">

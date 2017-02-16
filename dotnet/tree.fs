@@ -192,7 +192,7 @@ let rec expr env = function
         let fvs = List.map (fun v -> Id.L v, Var v) fvs
         MakeCls(xt1, { entry = l; actual_fv = fvs }, expr (Map.add x1 t1 env) e)
 
-let fundef env { P.name = Id.L x, t as name; P.args = args; P.formal_fv = formal_fv; P.body = body } =
+let fundef env { P.name = Id.L x, _ as name; P.args = args; P.formal_fv = formal_fv; P.body = body } =
     let env = addVars args env |> addVars formal_fv
     let useSelf = Set.contains x <| P.fv body
     {

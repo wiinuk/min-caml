@@ -15,8 +15,13 @@ type location =
     | This
     | StaticMethodSelf
 
-type env = {
+type global_env = {
+    globalCaches: Map<Id.t, field_def> ref
     fundefs: Map<Id.l, P.fundef>
+}
+
+type env = {
+    globalEnv: global_env
     vars: Map<Id.t, Type.t * location>
     isTail: bool
     methodName: Id.l
@@ -26,9 +31,8 @@ let addMany xts l ({ vars = vars } as env) =
     { env with vars = List.fold (fun map (x, t) -> Map.add x (t, l) map) vars xts }
 
 let topLevelTypeName = "MinCamlGlobal"
-let topLevelType = TypeName(Class, [], [], [], topLevelTypeName, [])
-let entrypointName = Id.L "MinCamlEntryPoint"
-let localTypeToCliType (Id.L n) = TypeName(Class, [], [], [topLevelTypeName], n, [])
+let topLevelType = TypeName(type_kind.Class, [], [], [], topLevelTypeName, [])
+let localTypeToCliType (Id.L n) = TypeName(type_kind.Class, [], [], [topLevelTypeName], n, [])
 
 type stack = {
     stack: exp list
@@ -37,6 +41,7 @@ type stack = {
 }
 
 let delta = function
+    | Nop
     | Label _
     | Br _ -> 0
 
@@ -53,13 +58,15 @@ let delta = function
     | Ldftn _ -> 1
 
     | Stloc _
-    | Pop -> -1
+    | Stsfld _
+    | Pop
+    | Brtrue _ -> -1
 
     | Neg
     | Ldfld _ -> -1 + 1
 
     | Dup -> -1 + 2
-    
+
     | BneUn _
     | Bgt _
     | Stfld _ -> -2
@@ -98,8 +105,8 @@ let private getCliFunctionElements t =
     let ts, t = getFunctionElements t
     List.map cliType ts, cliType t
 
-let ld { vars = env } id acc =
-    let t, location = Map.find id env
+let ld ({ vars = vars } as env) id acc =
+    let t, location = Map.find id vars
     match location with
     | Local -> acc++Ldloc id
     | Arg -> acc++Ldarg id
@@ -110,14 +117,44 @@ let ld { vars = env } id acc =
         ++Ldfld { fieldType = cliType t; declaringType = cli_type.This; name = Id.L id }
 
     | StaticMethodSelf ->
+        let { globalEnv = { globalCaches = caches }; methodName = Id.L methodName as name } = env
         let argTypes, resultType = getCliFunctionElements t
         let funcType = funType argTypes resultType
+        
+        // デリゲートをキャッシュして使いまわす
+        //
+        // [cs|
+        // var @temp = $methodName
+        // (@temp === null) ? ($methodName = new System.Func<…>(…)) : @temp
+        // |]
+        //
+        // [il|
+        // ldsfld $methodName   // Func<…>
+        // dup                  // Func<…>; Func<…>
+        // brinst 'created'     // (null: Func<…>)
+        //     ldftn …          // null; ((…) => …)*
+        //     newobj System.Func<…> // Func<…>
+        //     dup              // Func<…>; Func<…>
+        //     stsfld $methodName    // Func<…>
+        // 'created': nop       // Func<…>
+        // |]
+        
+        let fieldRef, fieldDef = fieldSpec(accesibility.Private, Static, funcType, cli_type.This, name)
 
-        // TODO: デリゲートをキャッシュして使いまわす
+        caches := Map.add methodName fieldDef !caches
+
+        let created = Id.L <| Id.genid "created"
+
         acc
-        ++Ldnull
+        ++Ldsfld fieldRef
+        ++Dup
+        ++brinst created
         ++Ldftn(methodRef(Static, Some resultType, topLevelType, Id.L id, [], argTypes))
         ++Newobj(funcType, [Object; NativeInt])
+        ++Dup
+        ++Stsfld fieldRef
+        ++Label created
+        ++Nop
 
 let many xs f acc = List.fold (fun acc x -> f x acc) acc xs
 
@@ -329,7 +366,7 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
             ++Stloc x
 
         let acc =
-            let { P.useSelf = useSelf } = Map.find l env.fundefs
+            let { P.useSelf = useSelf } = Map.find l env.globalEnv.fundefs
             if useSelf then
                 acc
                 ++Dup
@@ -483,7 +520,7 @@ and makeTuple ({ vars = vars } as env) xs acc =
         let types7 = List.map (P.typeof map vars >> cliType) xs
         let acc = acc+>nonTailMany xs env
         let acc, tailType = makeTuple env tail acc
-        let tupleType = TypeName(Class, ["mscorlib"], ["System"], [], "Tuple`8", types7 @ [tailType])
+        let tupleType = TypeName(type_kind.Class, ["mscorlib"], ["System"], [], "Tuple`8", types7 @ [tailType])
         let argTypes8 = [for i in 0..7 -> TypeArgmentIndex i]
         acc
         ++Newobj(tupleType, argTypes8), tupleType
@@ -519,12 +556,12 @@ and letTuple { usedLocals = locals } xts e2 acc =
     aux xts acc
     ++Pop
 
-let methodDef fundefs access callconv resultType name args formalFvs isEntrypoint env e =
+let methodDef genv access callconv resultType name args formalFvs isEntrypoint env e =
     let env = List.fold (fun env (y, t) -> Map.add y (t, Arg) env) env args
     let env = List.fold (fun env (z, t) -> Map.add z (t, InstanceField) env) env formalFvs
 
     let locals = ref Map.empty
-    let env = { fundefs = fundefs; vars = env; isTail = true; usedLocals = locals; methodName = name }
+    let env = { globalEnv = genv; vars = env; isTail = true; usedLocals = locals; methodName = name }
     let stack = { stack = []; maxSize = 8; size = 0 }
     let { stack = opcodes; maxSize = maxStack } = g env e stack
     let body = {
@@ -546,7 +583,7 @@ let methodDef fundefs access callconv resultType name args formalFvs isEntrypoin
     }
 
 let compilerGeneratedAttributeType =
-    TypeName(Class, ["mscorlib"], ["System";"Runtime";"CompilerServices"], [], "CompilerGeneratedAttribute", [])
+    TypeName(type_kind.Class, ["mscorlib"], ["System";"Runtime";"CompilerServices"], [], "CompilerGeneratedAttribute", [])
 
 let compilerGenerated = {
     ctor = ctorRef(compilerGeneratedAttributeType, [])
@@ -596,17 +633,17 @@ let closureClass fundefs { P.name = Id.L x' as x, t; P.args = yts; P.useSelf = u
         ++Custom compilerGenerated
 
     let acc =
-        if useSelf then acc++Field { access = Public; fieldType = funcType; name = x }
+        if useSelf then acc++field(Public, funcType, x)
         else acc
 
     let acc =
         acc
-        +>many zts (fun (z, y) acc ->
-            acc++Field { access = Public; fieldType = cliType y; name = Id.L z }
-        )
+        +>many zts (fun (z, y) acc -> acc++field(Public, cliType y, Id.L z))
         ++Method(methodDef fundefs Public Instance resultType (Id.L "Invoke") yts ((x', t)::zts) false Map.empty e)
         ++Method defaultCtor
     {
+        access = Default
+        isAbstract = false
         isSealed = true
         isBeforefieldinit = true
         name = x
@@ -633,18 +670,75 @@ let staticMethod fundefs { P.name = Id.L x' as x, t; P.args = yts; P.body = e } 
     let env = Map.add x' (t, StaticMethodSelf) Map.empty
     methodDef fundefs Public Static resultType x yts [] false env e
 
+let makeEntryPoint { name = n; resultType = resultType } =
+    let body = {
+        maxStack = None
+        isEntrypoint = true
+        locals = Map.empty
+        opcodes =
+        [
+            Call(false, {
+                callconv = Static
+                resultType = resultType
+                declaringType = topLevelType
+                methodName = n
+                typeArgs = []
+                argTypes = []
+            })
+            Pop
+            Ret
+        ]
+    }
+    {
+        access = Public
+        isSpecialname = false
+        isRtspecialname = false
+        callconv = Static
+        resultType = None
+        name = MethodName <| Id.L "Main"
+        args = []
+        isForwardref = false
+        body = body
+    }
+
 /// 関数の仮想マシンコード生成 (caml2html: virtual_h)
 let h fundefs = function
     | { P.formalFreeVars = [] } as f -> Method <| staticMethod fundefs f
     | f -> NestedClass <| closureClass fundefs f
 
 let f' (P.Prog(fundefs, e)) =
-    let env = List.fold (fun env ({ P.name = name, _ } as f) -> Map.add name f env) Map.empty fundefs
+    let fields = ref Map.empty
+    let env = {
+        fundefs = List.fold (fun env ({ P.name = name, _ } as f) -> Map.add name f env) Map.empty fundefs
+        globalCaches = fields
+    }
     let fundefs = List.map (h env) fundefs
-    Prog(
-        fundefs,
-        methodDef env Public Static Type.Unit entrypointName [] [] false Map.empty e
-    )
+    let startup = methodDef env Public Static Type.Unit (Id.L "MinCamlStartup") [] [] false Map.empty e
+    let main = makeEntryPoint startup
+    let fields = Map.toList !fields |> List.map (snd >> Field)
+
+    let assemblyDef = {
+        assemblyName = ["MinCamlGlobal"]
+        moduleName = []
+    }
+    let decls = [
+
+        // mscorlib は、System.Tuple`... が存在するバージョン 4.0.0.0 以上を指定
+        AssemblyRef {
+            name = "mscorlib"
+            publickeytoken = List.ofArray "\xB7\x7A\x5C\x56\x19\x34\xE0\x89"B
+            ver = Some(4,0,0,0)
+        }
+        Class {
+            access = Public
+            isAbstract = true
+            isSealed = true
+            isBeforefieldinit = true
+            name = Id.L topLevelTypeName
+            decls = fields @ fundefs @ [Method startup; Method main]
+        }
+    ]
+    Prog(assemblyDef, decls)
 
 /// プログラム全体の仮想マシンコード生成 (caml2html: virtual_f)
 let f p = P.f p |> StackAlloc.f |> f'

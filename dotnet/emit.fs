@@ -27,6 +27,7 @@ let groupOrEmpty first emit sep last o xs = groupCore true first emit sep last o
 let group first emit sep last o xs = groupCore false first emit sep last o xs
 
 let hexByte w x = fprintf w "%02x" x
+/// (00 01 ...)
 let wrapBytes w xs = group "(" hexByte " " ")" w xs
 
 let name oc = function
@@ -56,7 +57,7 @@ let rec type' oc = function
     | TypeArgmentIndex x -> fprintf oc "!%d" x
     | MethodArgmentIndex x -> fprintf oc "!!%d" x
     | TypeName(kind, moduleName, nameSpace, nestedParents, typeName, typeArgs) ->
-        oc += match kind with Class -> "class " | ValueType -> "valuetype "
+        oc += match kind with type_kind.Class -> "class " | ValueType -> "valuetype "
         groupOrEmpty "[" name "." "]" oc moduleName
         for x in nameSpace do (name oc x; oc += ".")
         for x in nestedParents do (name oc x; oc += "/")
@@ -138,12 +139,13 @@ let rec arrayAccess u1 i4 r8 ref = function
     | Type.Var { contents = None } -> failwith "unexpected type 'Var'"
 
 let ldelem t = arrayAccess "ldelem.u1" "ldelem.i4" "ldelem.r8" "ldelem.ref" t
-let stelem t = arrayAccess "stelem.u1" "stelem.i4" "stelem.r8" "stelem.ref" t
+let stelem t = arrayAccess "stelem.i1" "stelem.i4" "stelem.r8" "stelem.ref" t
 
 /// 命令のアセンブリ生成 (caml2html: emit_gprime)
 let opcode oc = function
     | Label(Id.L l) -> name oc l; oc += ":"
 
+    | Nop -> oc += "nop"
     | Dup -> oc += "dup"
     | Pop -> oc += "pop"
     | Add -> oc += "add"
@@ -159,6 +161,7 @@ let opcode oc = function
     | Br(Id.L l) -> oc += "br "; name oc l
     | BneUn(Id.L l) -> oc += "bne.un "; name oc l
     | Bgt(Id.L l) -> oc += "bgt "; name oc l
+    | Brtrue(Id.L l) -> oc += "brtrue "; name oc l
 
     | Ldarg l -> oc += "ldarg "; name oc l
     | Ldloc l -> oc += "ldloc "; name oc l
@@ -181,6 +184,7 @@ let opcode oc = function
     | Ldfld f -> oc += "ldfld "; fieldRef oc f
     | Stfld f -> oc += "stfld "; fieldRef oc f
     | Ldsfld f -> oc += "ldsfld "; fieldRef oc f
+    | Stsfld f -> oc += "stsfld "; fieldRef oc f
     | Callvirt(tail, m) ->
         oc += if tail then "tail. callvirt " else "callvirt "
         methodRef oc m
@@ -203,6 +207,7 @@ let custom oc x =
 
 let accessNonNested = function
     | Public -> "public "
+    | Private -> "private "
     | Default -> ""
 
 // .method assembly hidebysig instance int32 '<F>b__0'
@@ -269,9 +274,10 @@ let methodDef i oc
     newline oc i
     oc += "}"
 
-let fieldDef oc { access = a; fieldType = t; name = Id.L n } =
+let fieldDef oc { access = a; callconv = cc; fieldType = t; name = Id.L n } =
     oc += ".field "
     oc += accessNonNested a
+    oc += match cc with Static -> "static " | Instance -> ""
     type' oc t
     oc += " "
     name oc n
@@ -296,62 +302,43 @@ and classDef nested i oc
     if isBeforefieldinit then oc += "beforefieldinit "
     name oc n
     newline oc i; oc += "{"
-    for decl in decls do (newline oc (i + 1); classDecl (i + 1) oc decl)
+    for decl in decls do
+        newline oc (i + 1)
+        classDecl (i + 1) oc decl
     newline oc i; oc += "}"
 
-let makeEntryPoint { name = n; resultType = resultType } =
-    let body = {
-        maxStack = None
-        isEntrypoint = true
-        locals = Map.empty
-        opcodes =
-        [
-            Call(false, {
-                callconv = Static
-                resultType = resultType
-                declaringType = Virtual.topLevelType
-                methodName = n
-                typeArgs = []
-                argTypes = []
-            })
-            Pop
-            Ret
-        ]
-    }
-    {
-        access = Public
-        isSpecialname = false
-        isRtspecialname = false
-        callconv = Static
-        resultType = None
-        name = MethodName <| Id.L "Main"
-        args = []
-        isForwardref = false
-        body = body
-    }
+let assemblyDef oc { assemblyName = assemblyName; moduleName = moduleName } =
+    group ".assembly " name "." " {}" oc assemblyName; newline oc 0
 
-let f oc (Prog(decls, e)) =
+    match moduleName with
+    | [] -> ()
+    | _ -> group ".module " name "." "" oc moduleName; newline oc 0
+
+let assemblyRef oc = function
+    | { name = n; publickeytoken = []; ver = None } ->
+        oc += ".assembly extern "; name oc n; oc += " {}"
+
+    | { name = n; publickeytoken = key; ver = ver } ->
+        oc += ".assembly extern "; name oc n; newline oc 0
+        oc += "{"; newline oc 0
+        if not <| List.isEmpty key then
+            oc += "    .publickeytoken = "; wrapBytes oc key; newline oc 0
+        match ver with
+        | None -> ()
+        | Some(v1,v2,v3,v4) ->
+            fprintf oc "    .ver %d:%d:%d:%d" v1 v2 v3 v4; newline oc 0
+
+        oc += "}"
+
+let decl oc = function
+    | AssemblyRef x -> assemblyRef oc x
+    | Class x -> classDef false 0 oc x
+
+let f oc (Prog(def, decls)) =
     eprintf "generating assembly...@."
+    
+    assemblyDef oc def
 
-    // mscorlib は、System.Tuple`... が存在するバージョン 4.0.0.0 以上を指定
-    fprintfn oc ".assembly extern mscorlib"
-    fprintfn oc "{"
-    fprintfn oc "    .publickeytoken = (B7 7A 5C 56 19 34 E0 89)"
-    fprintfn oc "    .ver 4:0:0:0"
-    fprintfn oc "}"
-
-    fprintfn oc ".assembly MinCamlGlobal {}"
-
-    fprintfn oc ".class public abstract sealed beforefieldinit %s" Virtual.topLevelTypeName
-    oc += "{"
-    newline oc 1
     for d in decls do
-        classDecl 1 oc d
-        newline oc 1
-    methodDef 1 oc e
-
-    newline oc 1
-    methodDef 1 oc <| makeEntryPoint e
-
-    newline oc 0
-    fprintfn oc "}"
+        decl oc d
+        newline oc 0

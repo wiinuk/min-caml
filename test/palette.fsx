@@ -1,6 +1,7 @@
-﻿#r "../dotnet/MinCaml.Compiler.Cli/bin/debug/FsLexYacc.Runtime.dll"
-#r "../dotnet/MinCaml.Compiler.Cli/bin/debug/MinCaml.Compiler.Ast.dll"
-#r "../dotnet/MinCaml.Compiler.Cli/bin/debug/MinCaml.Compiler.Cli.dll"
+﻿#r "bin/debug/FsLexYacc.Runtime.dll"
+#r "bin/debug/MinCaml.Compiler.Ast.dll"
+#r "bin/debug/MinCaml.Compiler.Cli.dll"
+#r "bin/debug/MinCaml.Compiler.Test.dll"
 
 /// 最適化処理をくりかえす
 let rec iter n e =
@@ -330,16 +331,43 @@ module TreePrinter =
     Id.counter := 0
     Typing.extenv := M.empty
 
+//open System
+//let s = AppDomainSetup(ApplicationBase = AppDomain.CurrentDomain.SetupInformation.ApplicationBase)
+//
+//let d = AppDomain.CreateDomain("build", null, s, null)
+//d.DoCallBack(CrossAppDomainDelegate(fun x ->
+//    ()
+//))
+let d = System.AppDomain.CurrentDomain
+
+let a =
+    (
+    Id.counter := 0;
+    Typing.extenv := Map.empty;
+    "
+    let rec ack x y =
+      if x <= 0 then y + 1 else
+      if y <= 0 then ack (x - 1) 1 else
+      ack (x - 1) (ack x (y - 1)) in
+    print_int (ack 3 10)
+    "
+    )
+    |> closure 0
+    |> Tree.f
+    |> StackAlloc.f
+    |> Virtual.f'
+    |> DynamicAssembly.defineMinCamlAssembly d
+
 (
     Id.counter := 0;
     Typing.extenv := M.empty;
 "
-let x = 10 in
-let rec f y =
-  if y = 0 then 0 else
-  x + f (y - 1) in
-print_int (f 123)
-
+let rec f n =
+  if n < 0 then () else
+  (print_int n;
+   let a = Array.make 1 f in
+   a.(0) (n - 1)) in
+f 9
 "
 )
 |> closure 1000
@@ -382,6 +410,7 @@ do
 
 #r "bin/Debug/MinCaml.Compiler.Test.dll"
 open ExtraOperators
+
 cd <| __SOURCE_DIRECTORY__/"bin/debug/sources"
 pwd
 
@@ -457,11 +486,24 @@ childItem.get "*.ml.exe"
 
 exe "min-caml" "ack"
 
-exe ildasm "cls-rec.ml.exe -text"
-exe peverify "cls-rec.ml.exe /verbose"
+exe ildasm "cls-bug2.ml.exe -text"
+exe peverify "cls-bug2.ml.exe -verbose"
 
 
 exe ilasm "libmincaml.il matmul.il -out=matmul.ml.exe"
 
 exe "matmul.ml.exe" ""
 exe "matmul.fs.exe" ""
+
+open System
+open System.Reflection
+open System.Reflection.Emit
+let a = AppDomain.CurrentDomain.DefineDynamicAssembly(AssemblyName "test0", AssemblyBuilderAccess.RunAndCollect)
+let m = a.DefineDynamicModule "test0.dll"
+let type0 = m.DefineType "names.type1"
+
+let ntype0 = type0.DefineNestedType("nestedType0")
+
+let f1 = ntype0.DefineField("f1", typeof<int>, FieldAttributes.Public)
+
+m.GetType("names.type1+nestedType0")

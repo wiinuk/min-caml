@@ -4,6 +4,7 @@
     "NameConventions", "IdentifiersMustNotContainUnderscores")>]
 module Asm
 
+type dotted_name = Id.t list
 type type_kind = Class | ValueType
 type cli_type =
 
@@ -23,10 +24,10 @@ type cli_type =
     | NativeInt
     | Array of cli_type
 
-    /// e.g. class [moduleA]NamespaceA.ClassA/ClassB/Class
+    /// e.g. class [moduleA.dll]NamespaceA.ClassA/ClassB/Class
     | TypeName of
         type_kind *
-        moduleName: Id.t list *
+        moduleName: dotted_name *
         nameSpace: Id.t list *
         nestedParents: Id.t list *
         typeName: Id.t *
@@ -97,6 +98,7 @@ and exp =
     | Stloc of Id.t
     | Dup
     | Pop
+    | Nop
 
     | Ldnull
     | LdcI4 of int32
@@ -111,6 +113,7 @@ and exp =
     | Br of Id.l
     | BneUn of Id.l
     | Bgt of Id.l
+    | Brtrue of Id.l
 
     | Call of isTail: bool * method_ref
     | Ret
@@ -123,12 +126,18 @@ and exp =
     | Ldfld of field_ref
     | Stfld of field_ref
     | Ldsfld of field_ref
+    | Stsfld of field_ref
 
     /// callvirt instance $resultType $declaringType::$methodName($argTypes)
     | Callvirt of isTail: bool * method_ref
     | Ldftn of method_ref
 
-type accesibility = Public | Default
+type accesibility =
+    | Public
+    | Private
+    // class = Private; nested class = NestedPrivate
+    | Default
+
 type method_body = {
     maxStack: int option
     isEntrypoint: bool
@@ -158,6 +167,7 @@ type custom = {
 }
 type field_def = {
     access: accesibility
+    callconv: call_conv
     fieldType: cli_type
     name: Id.l
 }
@@ -167,15 +177,31 @@ type class_decl =
     | Field of field_def
     | NestedClass of class_def
 
-/// default accessibility
 and class_def = {
+    access: accesibility
+    isAbstract: bool
     isSealed: bool
     isBeforefieldinit: bool
     name: Id.l
     decls: class_decl list
 }
 
-type prog = Prog of class_decl list * entrypoint: method_def
+type assembly_ref = {
+    name: Id.t
+    publickeytoken: byte list
+    ver: (int * int * int * int) option
+}
+
+type assembly_def = {
+    assemblyName: dotted_name
+    moduleName: dotted_name
+}
+
+type decl =
+    | AssemblyRef of assembly_ref
+    | Class of class_def
+
+type prog = Prog of assembly_def * decl list
 
 let methodRef(callconv, resultType, declaringType, methodName, typeArgs, argTypes) = {
     callconv = callconv
@@ -231,3 +257,26 @@ let defaultCtor =
         ]
     }
     ctorDef(Public, [], false, body)
+
+let brinst x = Brtrue x
+
+let fieldSpec(access, callconv, fieldType, declaringType, name) =
+    let ref = {
+        fieldType = fieldType
+        declaringType = declaringType
+        name = name
+    }
+    let def = {
+        access = access
+        callconv = callconv
+        fieldType = fieldType
+        name = name
+    }
+    ref, def
+
+let field(access, fieldType, name) = Field {
+    access = access
+    callconv = Instance
+    fieldType = fieldType
+    name = name
+}
