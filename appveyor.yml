@@ -1,0 +1,15 @@
+version: 0.0.{build}
+branches:
+  only:
+  - fsharp-dotnet
+
+init:
+- ps: Set-WinSystemLocale ja-JP
+- ps: Restart-Computer
+
+before_build:
+- ps: nuget restore
+
+build:
+  project: min-caml.sln
+  verbosity: minimal
