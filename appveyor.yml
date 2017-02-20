@@ -13,3 +13,17 @@ before_build:
 build:
   project: min-caml.sln
   verbosity: minimal
+
+configuration:
+- Debug
+- Release
+
+artifacts:
+- path: dotnet/min-caml/bin/Release/min-caml.exe
+  name: min-caml
+  
+notifications:
+- provider: GitHubPullRequest
+  on_build_success: false
+  on_build_failure: false
+  on_build_status_changed: true

@@ -1,6 +1,9 @@
 ﻿module Test
 open ExtraOperators
 open Xunit
+open System
+open System.IO
+open System.Reflection.Emit
 
 //                 - 出力ファイル -
 // --out:<file>                   出力ファイルの名前 (短い形式: -o)
@@ -85,10 +88,10 @@ let testOnce sourceML = async {
     exe ilasm "-nologo -exe -output=%s libmincaml.il %s" binaryML sourceIL
     exe fsharpc "--nologo --mlcompatibility --nooptimizationdata --nointerfacedata --nowarn:0221 -o:%s libmincaml.fs %s" binaryFS (sourceML@."ml")
 
-    let! resultMC = expression.invokeAsync binaryML ""
+    let! resultML = expression.invokeAsync binaryML ""
     let! resultFS = expression.invokeAsync binaryFS ""
 
-    Assert.Equal(resultFS, resultMC)
+    Assert.Equal(resultFS, resultML)
 }
 
 let sourcesDirectory = pwd/"sources"
@@ -96,7 +99,129 @@ let sources() =
     cd sourcesDirectory
     gci "*.ml" |> select (fun x -> [|x.Name|])
 
-[<Theory; MemberData "sources">]
+[<Theory; MemberData "sources"; Trait("emit target", "ilasm")>]
 let test sourceML =
     cd sourcesDirectory
     testOnce sourceML |> Async.StartAsTask
+
+let rec iter n e =
+    eprintf "iteration %d@." n
+    if n = 0 then e else
+    let e' =
+        Beta.f e
+        |> Assoc.f
+        |> Inline.f
+        |> ConstFold.f
+        |> Elim.f
+
+    if e = e' then e
+    else iter (n - 1) e'
+
+let parseClosure =
+    let gate = obj()
+    fun c b -> lock gate <| fun _ ->
+        Id.counter := 0
+        Typing.extenv := M.empty
+        Parser.exp Lexer.token b
+        |> Typing.f
+        |> KNormal.f
+        |> Alpha.f
+        |> iter c
+        |> Closure.f
+
+let parse c b =
+    parseClosure c b
+    |> Tree.f
+    |> StackAlloc.f
+    |> Virtual.f'
+
+type Tester() =
+    inherit System.MarshalByRefObject()
+    member __.Test a =
+        let minCamlAssembly =
+            a
+            |> DynamicAssembly.defineMinCamlAssembly {
+                domain = AppDomain.CurrentDomain
+                access = AssemblyBuilderAccess.Run
+                directory = None
+                fileName = None
+            }
+
+        let topLevel = minCamlAssembly.GetType Virtual.topLevelTypeName
+        let main = topLevel.GetMethod Virtual.entryPointMethodName
+        
+        use w = new StringWriter()
+        Console.SetOut w
+        main.Invoke(null, [||]) |> ignore
+        w.Flush()
+        w.GetStringBuilder().ToString()
+
+let invokeInSandbox name f =
+    let sandbox =
+        let d = System.AppDomain.CurrentDomain
+        AppDomain.CreateDomain(sprintf "sandbox: %s" name, d.Evidence, d.SetupInformation)
+
+    try sandbox.DoCallBack(CrossAppDomainDelegate f)
+    finally AppDomain.Unload sandbox
+
+let recordStdout f =
+    let oldout = stdout
+    try
+        use w = new StringWriter()
+        Console.SetOut w
+        f()
+        w.Flush()
+        w.GetStringBuilder().ToString()
+    finally
+        Console.SetOut oldout
+
+let invokeML sourceML =
+    let a =
+        File.ReadAllText sourceML
+        |> Lexing.from_string
+        |> parse 1000
+
+    let minCamlAssembly =
+        a
+        |> DynamicAssembly.defineMinCamlAssembly {
+            domain = AppDomain.CurrentDomain
+            access = AssemblyBuilderAccess.RunAndCollect
+            directory = None
+            fileName = None
+        }
+
+    let topLevel = minCamlAssembly.GetType Virtual.topLevelTypeName
+    let main = topLevel.GetMethod Virtual.entryPointMethodName
+
+    recordStdout (fun _ ->
+        main.Invoke(null, [||]) |> ignore
+    )
+
+type C = class end
+type B = Reflection.BindingFlags
+
+let toModuleName = function
+    | "" -> ""
+    | s -> string (Char.ToUpperInvariant s.[0]) + s.[1..]
+
+let invokeFS sourceML =
+    let typeName =
+        toModuleName sourceML@.null
+        |> sprintf "<StartupCode$MinCaml-Compiler-Test>.$%s"
+
+    let startup = typeof<C>.Assembly.GetType(typeName, throwOnError = true)
+    let init = startup.GetField("init@", B.Public ||| B.NonPublic ||| B.Static)
+
+    recordStdout (fun _ ->
+        init.GetValue null |> ignore
+    )
+
+let testDynamicOnce sourceML =
+    let resultML = invokeML sourceML
+    let resultFS = invokeFS sourceML
+    Assert.Equal(resultFS, resultML)
+
+[<Theory; MemberData "sources"; Trait("emit target", "dynamic dll")>]
+let testDynamic sourceML =
+    cd sourcesDirectory
+    testDynamicOnce sourceML

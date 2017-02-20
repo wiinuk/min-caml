@@ -14,19 +14,23 @@ type cli_type =
     | TypeArgmentIndex of int
     /// e.g. !!0
     | MethodArgmentIndex of int
+    /// e.g. !!T
+    | MethodTypeArgument of Id.t
 
     /// sizeof<bool> = 1
     | Bool
+    | Char
     | Int32
     | Float64
+    | String
     | Object
     /// native int
     | NativeInt
     | Array of cli_type
 
     /// e.g. class [moduleA.dll]NamespaceA.ClassA/ClassB/Class
-    | TypeName of
-        type_kind *
+    | TypeRef of
+        kind: type_kind *
         moduleName: dotted_name *
         nameSpace: Id.t list *
         nestedParents: Id.t list *
@@ -47,14 +51,14 @@ let rec tupleType types =
         | Some(types, tail) -> types @ [tupleType tail]
 
     let arity = List.length types
-    TypeName(Class, ["mscorlib"], ["System"], [], "Tuple`" + string arity, types)
+    TypeRef(Class, ["mscorlib"], ["System"], [], "Tuple`" + string arity, types)
 
-let unitType = TypeName(Class, ["mscorlib"], ["System"], [], "DBNull", [])
+let unitType = TypeRef(Class, ["mscorlib"], ["System"], [], "DBNull", [])
 
 let funType argTypes resultType =
     let name = sprintf "Func`%d" <| List.length argTypes + 1
     let args = argTypes @ [resultType]
-    TypeName(Class, ["mscorlib"], ["System"], [], name, args)
+    TypeRef(Class, ["mscorlib"], ["System"], [], name, args)
 
 let rec cliType = function
     | Type.Array t -> Array <| cliType t
@@ -110,16 +114,23 @@ and exp =
     | Mul
     | Div
 
+    | ConvU2
+    | ConvI4
+    | ConvR8
+    | ConvOvfU1
+
     | Br of Id.l
     | BneUn of Id.l
     | Bgt of Id.l
+    | Blt of Id.l
     | Brtrue of Id.l
 
     | Call of isTail: bool * method_ref
     | Ret
 
-    | Ldelem of Type.t
-    | Stelem of Type.t
+    | Newarr of cli_type
+    | Ldelem of cli_type
+    | Stelem of cli_type
 
     /// newobj instance void $declaringType::.ctor($argTypes)
     | Newobj of declaringType: cli_type * argTypes: cli_type list
@@ -143,7 +154,7 @@ type method_body = {
     isEntrypoint: bool
 
     /// .locals init (...)
-    locals: Map<Id.t, Type.t>
+    locals: Map<Id.t, cli_type>
     opcodes: t
 }
 
@@ -155,7 +166,8 @@ type method_def = {
     /// None = void
     resultType: cli_type option
     name: method_name
-    args: (Id.t * Type.t) list
+    typeArgs: Id.t list
+    args: (Id.t * cli_type) list
     isForwardref: bool
     body: method_body
 }
@@ -239,8 +251,22 @@ let ctorDef(access, args, isForwardref, body) = {
     callconv = Instance
     resultType = None
     name = Ctor
+    typeArgs = []
     args = args
     isForwardref = isForwardref
+    body = body
+}
+
+let methodDef(access, callconv, resultType, name, typeArgs, args, body) = {
+    access = access
+    isSpecialname = false
+    isRtspecialname = false
+    callconv = callconv
+    resultType = resultType
+    name = MethodName <| Id.L name
+    typeArgs = typeArgs
+    args = args
+    isForwardref = false
     body = body
 }
 

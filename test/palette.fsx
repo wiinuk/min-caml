@@ -34,311 +34,38 @@ let emit x =
     Emit.f w x
     w.GetStringBuilder().ToString()
 
-let string iter l =
+let compileToAsm iter l =
     closure iter l
     |> Virtual.f
     |> Simm.f
     |> RegAlloc.f
     |> emit
 
-module Printer =
-    let wrapCore emptyIfNonWrap singleIfNonWrap first sep last xs = seq {
-        if Seq.isEmpty xs then
-            yield! first
-            yield! last
-        else
-            let t = Seq.head xs
-            let ts = Seq.tail xs
-            yield! first
-            yield! t
-            for t in ts do
-                yield! sep
-                yield! t
-            yield! last
-    }
-    let wrap first sep last xs = wrapCore false false [first] [sep] [last] xs
-    let wrapTuple = wrap "(" ", " ")"
-
-    let between first last x = seq {
-        yield first
-        yield! x
-        yield last
-    }
-    let newline i = seq {
-        yield "\n"
-        for _ in 1..i -> "    "
-    }
-
-    let rec type' x = seq {
-        match x with
-        | Type.Unit -> yield "()"
-        | Type.Array t -> yield! between "[" "]" <| type' t
-        | Type.Bool -> yield "bool"
-        | Type.Int -> yield "int"
-        | Type.Float -> yield "float"
-        | Type.Fun(ts, t) ->
-            yield! List.map type' ts |> wrapCore false true ["("] [", "] [")"]
-            yield " => "
-            yield! type' t
-
-        | Type.Tuple ts -> yield! List.map type' ts |> wrapTuple
-        | Type.Var { contents = Some t } -> yield! type' t
-        | Type.Var _ -> failwith "unexpected type 'Var'"
-    }
-    let typed (x, t) = seq { yield x; yield " : "; yield! type' t }
-
-module ClosurePrinter =
-    open Closure
-    open Printer
-    
-    let rec exp i x = seq {
-        match x with
-        | Unit -> yield "()"
-        | Int x -> yield Operators.string x
-        | Float x -> yield Operators.string x
-
-        | Add(x, y) -> yield! [x; " + "; y]
-        | Sub(x, y) -> yield! [x; " - "; y]
-        | Neg x -> yield! ["-"; x]
-        | FNeg x -> yield! ["-."; x]
-        | FAdd(x, y) -> yield! [x; " +. "; y]
-        | FSub(x, y) -> yield! [x; " -. "; y]
-        | FMul(x, y) -> yield! [x; " *. "; y]
-        | FDiv(x, y) -> yield! [x; " /. "; y]
-        | IfEq(x, y, e1, e2) -> yield! ifRelational " == " i (x, y, e1, e2)
-        | IfLE(x, y, e1, e2) -> yield! ifRelational " <= " i (x, y, e1, e2)
-
-        | Let(xt, e1, e2) ->
-            yield! typed xt
-            yield " = "
-            yield! exp (i + 1) e1
-            yield! newline i
-            yield! exp i e2
-
-        | Var x -> yield x
-        | MakeCls(xt, { entry = Id.L entry; actual_fv = actual_fv }, e2) ->
-            yield! typed xt
-            yield " = "
-            yield entry
-            yield! List.map Seq.singleton actual_fv |> wrap "{" ", " "}"
-            yield! newline i
-            yield! exp i e2
-
-        | AppCls(x, xs) ->
-            yield x
-            yield "#"
-            yield! wrapTuple <| List.map Seq.singleton xs
-
-        | AppDir(Id.L x, xs) ->
-            yield x
-            yield! wrapTuple <| List.map Seq.singleton xs
-
-        | Tuple xs ->
-            yield! wrapTuple <| List.map Seq.singleton xs
-
-        | LetTuple(xs, x, e2) ->
-            yield! wrapTuple <| List.map typed xs
-            yield " = "
-            yield x
-            yield! newline i
-            yield! exp i e2
-
-        | Get(xs, i) -> yield sprintf "%s[%s]" xs i
-        | Put(xs, i, x) -> yield sprintf "%s[%s] <- %s" xs i x
-        | ExtArray(Id.L xs) -> yield sprintf "(extern %s)" xs
-        }
-    and ifRelational op i (x, y, e1, e2) = seq {
-        yield "if "
-        yield x
-        yield op
-        yield y
-        yield " then"
-        yield! newline (i + 1)
-        yield! exp (i + 1) e1
-        yield! newline i
-        yield "else"
-        yield! newline (i + 1)
-        yield! exp (i + 1) e2
-        }
-
-    let fundef { name = Id.L name, t; args = args; formal_fv = formal_fv; body = body } = seq {
-        yield! typed (name, t)
-        yield " "
-        yield! List.map typed args |> wrapTuple
-        yield " "
-        yield! List.map typed formal_fv |> wrap "{" ", " "}"
-        yield " ="
-        yield! newline 1
-        yield! exp 1 body
-    }
-    let prog (Prog(fundefs, main)) = seq {
-        for f in fundefs do
-            yield! fundef f
-            yield! newline 0
-        yield "do"
-        yield! newline 1
-        yield! exp 1 main
-        yield! newline 0
-    }
-
-module TreePrinter =
-    open Tree
-    open Printer
-
-    let unary = function
-        | Neg -> "-"
-
-    let binary = function
-        | Add -> " + "
-        | Sub -> " - "
-        | Mul -> " * "
-        | Div -> " / "
-
-    let condition = function
-        | Eq -> " == "
-        | Le -> " <= "
-
-    let rec isSingleLine = function
-        | Unit
-        | Int _
-        | Float _
-        | Var _
-        | ExtArray _ -> true
-
-        | Binary(x, _, y) -> isSingleLine x && isSingleLine y
-        | Unary(_, x) -> isSingleLine x
-        | AppCls(x, xs) -> isSingleLine x && List.forall isSingleLine xs
-        | AppDir(_, xs)
-        | Tuple xs -> List.forall isSingleLine xs
-
-        | _ -> false
-
-    let rec exp i x = seq {
-        match x with
-        | Unit -> yield "()"
-        | Int x -> yield Operators.string x
-        | Float x -> yield Operators.string x
-
-        | Binary(x, op, y) -> yield! exp i x; yield binary op; yield! exp i y
-        | Unary(op, x) -> yield unary op; yield! exp i x
-        | Condition(x, op, y, e1, e2) -> yield! ifRelational (condition op) i (x, y, e1, e2)
-        | Seq(e1, e2) ->
-            yield! exp i e1
-            yield! newline i
-            yield! exp i e2
-
-        | Let(xt, e1, e2) ->
-            yield! typed xt
-            if isSingleLine e1 then
-                yield " = "
-                yield! exp (i + 1) e1
-            else
-                yield " ="
-                yield! newline (i + 1)
-                yield! exp (i + 1) e1
-            yield! newline i
-            yield! exp i e2
-
-        | Var x -> yield x
-        | MakeCls(xt, { entry = Id.L entry; actual_fv = actual_fv }, e2) ->
-            yield! typed xt
-            yield " = "
-            yield entry
-            yield!
-                actual_fv
-                |> Seq.map (fun (Id.L l, e) -> seq {
-                    yield l
-                    yield " = "
-                    yield! exp (i + 1) e 
-                })
-                |> wrap "{" ", " "}"
-
-            yield! newline i
-            yield! exp i e2
-
-        | AppCls(x, xs) ->
-            yield! exp i x
-            yield "#"
-            yield! wrapTuple <| List.map (exp i) xs
-
-        | AppDir((Id.L x, t), xs) ->
-            yield! between "(" ")" <| typed (x, t)
-            yield! wrapTuple <| List.map (exp i) xs
-
-        | Tuple xs ->
-            yield! wrapTuple <| List.map (exp i) xs
-
-        | LetTuple(xs, x, e2) ->
-            yield! wrapTuple <| List.map typed xs
-            yield " ="
-            yield! newline (i + 1)
-            yield! exp i x
-            yield! newline i
-            yield! exp i e2
-
-        | Get(xs, ix) ->
-            yield! exp i xs
-            yield "["
-            yield! exp i ix
-            yield "]"
-
-        | Put(xs, ix, x) ->
-            yield! exp i xs
-            yield "["
-            yield! exp i ix
-            yield "] <- "
-            yield! exp i x
-
-        | ExtArray(Id.L xs, t) -> yield! between "(extern " ")" <| typed (xs, Type.Array t)
-        }
-
-    and ifRelational op i (x, y, e1, e2) = seq {
-        yield "if "
-        yield! exp i x
-        yield op
-        yield! exp i y
-        yield " then"
-        yield! newline (i + 1)
-        yield! exp (i + 1) e1
-        yield! newline i
-        yield "else"
-        yield! newline (i + 1)
-        yield! exp (i + 1) e2
-    }
-
-    let fundef { name = Id.L name, t; args = args; formalFreeVars = formal_fv; body = body } = seq {
-        yield! typed (name, t)
-        yield " "
-        yield! List.map typed args |> wrapTuple
-        yield " "
-        yield! List.map typed formal_fv |> wrap "{" ", " "}"
-        yield " ="
-        yield! newline 1
-        yield! exp 1 body
-    }
-    let prog (Prog(fundefs, main)) = seq {
-        for f in fundefs do
-            yield! fundef f
-            yield! newline 0
-        yield "do"
-        yield! newline 1
-        yield! exp 1 main
-        yield! newline 0
-    }
-
-
-
-    Id.counter := 0
-    Typing.extenv := M.empty
+"
+let rec ack x y =
+    if x <= 0 then y + 1 else
+    if y <= 0 then ack (x - 1) 1 else
+    ack (x - 1) (ack x (y - 1)) in
+print_int (ack 3 10)
+"
 
 //open System
-//let s = AppDomainSetup(ApplicationBase = AppDomain.CurrentDomain.SetupInformation.ApplicationBase)
+//open System.Reflection
+//open System.Reflection.Emit
+//do
+//    let a = AppDomain.CurrentDomain.DefineDynamicAssembly(AssemblyName "test", AssemblyBuilderAccess.ReflectionOnly)
+//    let m = a.DefineDynamicModule "test"
+//    let t0 = m.DefineType "T0"
+//    let m0 = t0.DefineMethod("M0", MethodAttributes.Public ||| MethodAttributes.Static)
+//    let [|mt0|] = m0.DefineGenericParameters("MT0")
+//    let ``m0<t0>`` = m0.MakeGenericMethod(t0)
 //
-//let d = AppDomain.CreateDomain("build", null, s, null)
-//d.DoCallBack(CrossAppDomainDelegate(fun x ->
+//    ``m0<t0>``.GetGenericMethodDefinition() = upcast m0
 //    ()
-//))
-let d = System.AppDomain.CurrentDomain
+//
+//#r "MinCamlGlobal.exe"
+//MinCamlGlobal.min_caml_create_float_array(10, nan)
+//MinCamlGlobal.``ack.15``(2, 2)
 
 let a =
     (
@@ -346,9 +73,9 @@ let a =
     Typing.extenv := Map.empty;
     "
     let rec ack x y =
-      if x <= 0 then y + 1 else
-      if y <= 0 then ack (x - 1) 1 else
-      ack (x - 1) (ack x (y - 1)) in
+    if x <= 0 then y + 1 else
+    if y <= 0 then ack (x - 1) 1 else
+    ack (x - 1) (ack x (y - 1)) in
     print_int (ack 3 10)
     "
     )
@@ -356,7 +83,35 @@ let a =
     |> Tree.f
     |> StackAlloc.f
     |> Virtual.f'
-    |> DynamicAssembly.defineMinCamlAssembly d
+    |> DynamicAssembly.defineMinCamlAssembly {
+        domain = System.AppDomain.CurrentDomain
+        access = System.Reflection.Emit.AssemblyBuilderAccess.RunAndSave
+        directory = Some __SOURCE_DIRECTORY__
+        fileName = None
+    }
+
+type B = System.Reflection.BindingFlags
+typeof<Test.Tester>.Assembly.GetType("Ack")
+    .GetConstructors(B.Static)
+
+let w = new System.IO.StringWriter()
+System.Console.SetOut w
+printfn "test %d %c" 10 'a'
+
+open System
+let sandbox =
+    let d = AppDomain.CurrentDomain
+    AppDomain.CreateDomain("sandbox", d.Evidence, d.SetupInformation)
+
+a.Save "MinCamlGlobal.exe"
+
+
+
+a.GetType("MinCamlGlobal").GetMethod("Main").Invoke(null, [||])
+
+let m = a.GetTypes().[0]
+
+m.GetMethods()
 
 (
     Id.counter := 0;
@@ -486,8 +241,9 @@ childItem.get "*.ml.exe"
 
 exe "min-caml" "ack"
 
-exe ildasm "cls-bug2.ml.exe -text"
-exe peverify "cls-bug2.ml.exe -verbose"
+let target = __SOURCE_DIRECTORY__/"MinCamlGlobal.exe"
+exe ildasm "%s -text" target
+exe peverify "%s -verbose" target
 
 
 exe ilasm "libmincaml.il matmul.il -out=matmul.ml.exe"
@@ -495,15 +251,15 @@ exe ilasm "libmincaml.il matmul.il -out=matmul.ml.exe"
 exe "matmul.ml.exe" ""
 exe "matmul.fs.exe" ""
 
+
 open System
 open System.Reflection
 open System.Reflection.Emit
-let a = AppDomain.CurrentDomain.DefineDynamicAssembly(AssemblyName "test0", AssemblyBuilderAccess.RunAndCollect)
-let m = a.DefineDynamicModule "test0.dll"
-let type0 = m.DefineType "names.type1"
 
-let ntype0 = type0.DefineNestedType("nestedType0")
+let a = AppDomain.CurrentDomain.DefineDynamicAssembly(AssemblyName "Assembly0", AssemblyBuilderAccess.Run)
+let m = a.DefineDynamicModule("Module0")
+/// System.Reflection.Emit.ModuleBuilder m = ...
 
-let f1 = ntype0.DefineField("f1", typeof<int>, FieldAttributes.Public)
-
-m.GetType("names.type1+nestedType0")
+m.DefineType("'Ty.pe0'").Name // "pe0'"
+m.DefineType("\"Ty.pe0\"").Name // "pe0\""
+m.DefineType("Ty\\.pe0").Name // "pe0"

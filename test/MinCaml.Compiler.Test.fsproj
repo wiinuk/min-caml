@@ -205,19 +205,33 @@
     <Compile Include="..\dotnet\shell.fsx">
       <Link>shell.fsx</Link>
     </Compile>
+    <Compile Include="..\dotnet\libmincamlVirtual.fs">
+      <Link>libmincamlVirtual.fs</Link>
+    </Compile>
+    <Compile Include="..\dotnet\dynamicAssembly.fs">
+      <Link>dynamicAssembly.fs</Link>
+    </Compile>
     <Compile Include="..\dotnet\Test.fs">
       <Link>Test.fs</Link>
     </Compile>
     <None Include="palette.fsx" />
     <Content Include="packages.config" />
     <Compile Include="Arg.Test.fs" />
-    <Compile Include="..\dotnet\dynamicAssembly.fs">
-      <Link>dynamicAssembly.fs</Link>
+    <Compile Include="..\dotnet\printer.fs">
+      <Link>printer.fs</Link>
     </Compile>
+    <Content Include="App.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
-    <Reference Include="FSharp.Core">
-      <HintPath>..\packages\FSharp.Core.4.0.0.1\lib\net40\FSharp.Core.dll</HintPath>
+    <Reference Include="FSharp.Core, Version=4.3.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
+      <HintPath>..\packages\FSharp.Core.3.0.2\lib\net40\FSharp.Core.dll</HintPath>
+      <SpecificVersion>False</SpecificVersion>
+    </Reference>
+    <Reference Include="FsLexYacc.Runtime">
+      <HintPath>..\packages\FsLexYacc.Runtime.6.1.0\lib\net40\FsLexYacc.Runtime.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="mscorlib" />
     <Reference Include="System" />

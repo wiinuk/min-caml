@@ -13,42 +13,48 @@ type B = Reflection.BindingFlags
 type O = Emit.OpCodes
 
 type members = {
+    /// generic method definitions
     methods: Dictionary<string * cli_type list, MethodBuilder>
     ctors: Dictionary<cli_type list, ConstructorBuilder>
     fields: Dictionary<string, FieldBuilder>
+    /// generic type definitions
     nestedTypes: Dictionary<string, TypeBuilder>
 }
 
-let typeMembersField = ConditionalWeakTable()
-let members x =
-    let mutable m = Unchecked.defaultof<_>
-    if typeMembersField.TryGetValue(x, &m) then m else
-
-    let m = {
-        ctors = Dictionary()
-        methods = Dictionary()
-        nestedTypes = Dictionary()
-        fields = Dictionary()
-    }
-    typeMembersField.Add(x, m)
-    m
-
-type TypeBuilder with
-    /// extension val
-    member x.members = members x
+type cli_method_base =
+    | ConstructorInfo of ConstructorInfo
+    | MethodInfo of MethodInfo
 
 type env = {
     modules: ModuleBuilder list
     thisType: Type option
-    thisMethodGenericArgments: Type list
+    methodTypeArgs: (string * Type) list
+
     entryPoint: MethodBuilder option ref
+
+    typeMembers: Dictionary<TypeBuilder, members>
 }
 type method_env = {
     env: env
     args: Map<string, uint16>
     locals: Map<string, LocalBuilder>
-    lavels: Map<string, Label>
+    labels: Map<string, Label>
 }
+
+let membersCore (typeMembers: Dictionary<_,_>) t =
+    let mutable r = Unchecked.defaultof<_>
+    if typeMembers.TryGetValue(t, &r) then r else
+    
+    let ms = {
+        ctors = Dictionary()
+        methods = Dictionary()
+        nestedTypes = Dictionary()
+        fields = Dictionary()
+    }
+    typeMembers.Add(t, ms)
+    ms
+let members { typeMembers = xs } t = membersCore xs t
+
 let private getThis { thisType = this } =
     match this with
     | None -> failwith "require 'this' type"
@@ -60,11 +66,105 @@ let resolveDynamicTypeOfModules { modules = modules } name =
     |> function
     | Some(:? TypeBuilder as t) -> t
     | _ -> failwithf "type builder not found: %s" name
+    
+/// Class<!T>.Method<!!U>(!T, !!U) を Class<!T>.Method<!!U>(!0, !!0) に置き換える
+let rec normalizeTypeArgumentsCore methodTypeParams = function
+    | Bool
+    | Char
+    | Int32
+    | Float64
+    | String
+    | Object
+    | NativeInt 
+
+    | This
+    | TypeArgmentIndex _
+    | MethodArgmentIndex _ as t -> t
+
+    | MethodTypeArgument n ->
+        try
+            methodTypeParams
+            |> Seq.findIndex ((=) n)
+            |> MethodArgmentIndex
+        with
+        | :? KeyNotFoundException ->
+            failwithf "generic type argments: %A is not found in %A" n methodTypeParams
+
+    | Array t -> normalizeTypeArgumentsCore methodTypeParams t |> cli_type.Array
+    | TypeRef(kind, moduleName, nameSpace, nestedParents, typeName, typeArgs) ->
+        let typeArgs = List.map (normalizeTypeArgumentsCore methodTypeParams) typeArgs
+        TypeRef(kind, moduleName, nameSpace, nestedParents, typeName, typeArgs)
+
+let normalizeTypeArguments { methodTypeArgs = typeArgs } t =
+    normalizeTypeArgumentsCore (Seq.map fst typeArgs) t
+
+// 現在の ModuleBuilder#DefineType, TypeBuilder#DefineNestedtype では 型の名前に '.', ',', '+' を含めることができない
+let escapeTypeName x =
+    if String.forall (function '@' | '.' | '+' | ',' -> false | _ -> true) x then x else
+
+    x
+    |> String.collect (function
+        | '@' -> "@@"
+        | '.' -> "@2eU"
+        | '+' -> "@2bU"
+        | ',' -> "@2cU"
+        | x -> string x
+    )
+    
+let addOrThrow (xs: Dictionary<_,_>) k v =
+    try xs.Add(k, v) with
+    | :? System.ArgumentException when xs.ContainsKey k ->
+        failwithf "duplicated entry. old: %A, new: %A" (k, xs.[k]) (k, v)
+
+let addCtor env parent argTypes x =
+    let { ctors = ctors } = members env parent
+    let argTypes = List.map (normalizeTypeArguments env) argTypes
+    addOrThrow ctors argTypes x
+
+let addField env parent name x =
+    let { fields = fields } = members env parent
+    addOrThrow fields name x
+
+let addMethod env parent (name, argTypes) x =
+    let { methods = methods } = members env parent
+    let argTypes = List.map (normalizeTypeArguments env) argTypes
+    addOrThrow methods (name, argTypes) x
+
+let addNestedType env parent name x =
+    let { nestedTypes = nestedTypes } = membersCore env parent
+    addOrThrow nestedTypes (escapeTypeName name) x
+    
+let getOrThrow (xs: Dictionary<_,_>) k =
+    let mutable v = Unchecked.defaultof<_>
+    if xs.TryGetValue(k, &v) then v else
+
+    let xs = Seq.map (|KeyValue|) xs
+    failwithf "entry not found. key: %A, map: %A" k xs
+
+let findCtor env parent argTypes =
+    let { ctors = ctors } = members env parent
+    let argTypes = List.map (normalizeTypeArguments env) argTypes
+    getOrThrow ctors argTypes
+
+let findField env parent name =
+    let { fields = fields } = members env parent
+    getOrThrow fields name
+
+let findMethod env parent (name, argTypes) =
+    let { methods = methods } = members env parent
+    let argTypes = List.map (normalizeTypeArguments env) argTypes
+    getOrThrow methods (name, argTypes)
+
+let findNestedType env parent name =
+    let { nestedTypes = nestedTypes } = members env parent
+    getOrThrow nestedTypes <| escapeTypeName name
 
 let rec resolveType env = function
-    | Int32 -> typeof<int>
     | Bool -> typeof<bool>
+    | Char -> typeof<char>
+    | Int32 -> typeof<int>
     | Float64 -> typeof<double>
+    | String -> typeof<string>
     | Object -> typeof<obj>
 
     // TODO: nativeint = System.IntPtr; native int を指定したい
@@ -73,13 +173,14 @@ let rec resolveType env = function
 
     | This -> getThis env
     | TypeArgmentIndex i -> getThis(env).GetGenericTypeDefinition().GetGenericArguments().[i]
-    | MethodArgmentIndex i -> env.thisMethodGenericArgments.[i]
+    | MethodArgmentIndex i -> snd env.methodTypeArgs.[i]
+    | MethodTypeArgument n -> List.find (fun (n', _) -> n = n') env.methodTypeArgs |> snd
 
-    | TypeName(_, moduleName, nameSpace, nestedParents, typeName, typeArgs) as t ->
+    | TypeRef(_, moduleName, nameSpace, nestedParents, typeName, typeArgs) as t ->
         let moduleName = String.concat "." moduleName
         let nameSpace = Seq.map (fun n -> n + ".") nameSpace |> String.concat ""
         let nestedParents = Seq.map (fun n -> n + "+") nestedParents |> String.concat ""
-        let fullName = nameSpace + nestedParents + typeName
+        let fullName = nameSpace + nestedParents + escapeTypeName typeName
         let qualifiedName = if moduleName <> "" then fullName + ", " + moduleName else fullName
 
         let t =
@@ -91,57 +192,66 @@ let rec resolveType env = function
 
         let typeArgs = [|for t in typeArgs -> resolveType env t|]
         t.MakeGenericType typeArgs
-        
+
 let resolveField env { declaringType = parent; name = Id.L name } =
     let t = resolveType env parent
     let a = B.DeclaredOnly ||| B.Public ||| B.NonPublic ||| B.Instance ||| B.Static
-    match t.GetField(name, a) with
-    | null -> (t :?> TypeBuilder).members.fields.[name] :> FieldInfo
-    | m -> m
+    match t with
+    | :? TypeBuilder as t -> findField env t name :> FieldInfo
+    | _ -> t.GetField(name, a)
 
-type cli_method_base =
-    | ConstructorBuilder of ConstructorBuilder
-    | ConstructorInfo of ConstructorInfo
-    | MethodBuilder of MethodBuilder
-    | MethodInfo of MethodInfo
+let raiseMethodNotFound m = failwithf "method not found; name: %A" m
 
-let resolveMethodBaseCore env 
-    {
+
+let resolveMethodBase env m =
+    let {
         callconv = cc
         resultType = r
         declaringType = parent
         typeArgs = typeArgs
         methodName = name
         argTypes = argTypes
-    }
-    =
+        } = m
+
+    let typeArgs = List.map (resolveType env) typeArgs
     let t = resolveType env parent
-    let argTypes' = [|for t in argTypes -> resolveType env t|]
+    let env = {
+        env with
+            methodTypeArgs = List.map (fun t -> "", t) typeArgs
+            thisType = Some t
+    }
     match name with
     | Ctor ->
         let a = B.DeclaredOnly ||| B.Public ||| B.NonPublic ||| B.Instance
-        match t.GetConstructor(a, null, argTypes', null) with
-        | null -> (t :?> TypeBuilder).members.ctors.[argTypes] |> Choice2Of4
-        | c -> Choice1Of4 c
+        match t with
+        | :? TypeBuilder as t -> ConstructorInfo <| upcast findCtor env t argTypes
+        | _ ->
+
+        let argTypes = [|for t in argTypes -> resolveType env t|]
+        match t.GetConstructor(a, null, argTypes, null) with
+        | null -> raiseMethodNotFound m
+        | m -> ConstructorInfo m
 
     | MethodName(Id.L name) ->
         let a = B.DeclaredOnly ||| B.Public ||| B.NonPublic
         let a = match cc with Instance -> a ||| B.Instance | Static -> a ||| B.Static
-        match t.GetMethod(name, a, null, argTypes', null) with
-        | null -> (t :?> TypeBuilder).members.methods.[(name, argTypes)] |> Choice4Of4
-        | m -> Choice3Of4 m
+        match t with
+        | :? TypeBuilder as t ->
+            let m = findMethod env t (name, argTypes)
+            if not m.IsGenericMethodDefinition then MethodInfo m else
 
-let resolveMethod env m =
-    match resolveMethodBaseCore env m with
-    | Choice3Of4 x -> x
-    | Choice4Of4 x -> upcast x
-    | x -> failwithf "require method: %A" x
+            MethodInfo <| m.MakeGenericMethod(List.toArray typeArgs)
 
-let resolveConstructor env m =
-    match resolveMethodBaseCore env m with
-    | Choice1Of4 x -> x
-    | Choice2Of4 x -> upcast x
-    | x -> failwithf "require constructor: %A" x
+        | _ ->
+
+        let argTypes = [|for t in argTypes -> resolveType env t|]
+        match t.GetMethod(name, a, null, argTypes, null) with
+        | null when t.IsGenericType ->
+            match t.GetGenericTypeDefinition().GetMethod(name, a, null, argTypes, null)  with
+            | null -> raiseMethodNotFound m
+            | m -> MethodInfo m
+        | null -> raiseMethodNotFound m
+        | m -> MethodInfo m
 
 module DeclareTypes =
     let defineType defineType a
@@ -153,15 +263,15 @@ module DeclareTypes =
         =
         let a = if isSealed then a ||| T.Sealed else a
         let a = if isBeforefieldinit then a ||| T.BeforeFieldInit else a
-        defineType(name, a)
+        defineType(escapeTypeName name, a)
 
-    let rec classDecl t = function
+    let rec classDecl env t = function
         | Method _
         | Custom _
         | Field _ -> ()
-        | NestedClass c -> classDef (Choice2Of2 t) c
+        | NestedClass c -> classDef env (Choice2Of2 t) c
 
-    and classDef parent ({ access = access; decls = decls; name = Id.L name } as c) =
+    and classDef env parent ({ access = access; decls = decls; name = Id.L name } as c) =
         let t =
             match parent with
             | Choice1Of2(parent: ModuleBuilder) ->
@@ -175,21 +285,21 @@ module DeclareTypes =
             | Choice2Of2(parent: TypeBuilder) ->
                 let a =
                     match access with
-                    | Default -> enum 0
+                    | Default -> T.NestedPrivate
                     | Public -> T.NestedPublic
                     | Private -> T.NestedPrivate
                 let t = defineType parent.DefineNestedType a c
-                parent.members.nestedTypes.Add(name, t)
+                addNestedType env parent name t
                 t
 
-        for d in decls do classDecl t d
+        for d in decls do classDecl env t d
 
-    let decl a = function
+    let decl env a = function
         | AssemblyRef _ -> ()
-        | Class c -> classDef (Choice1Of2 a) c
+        | Class c -> classDef env (Choice1Of2 a) c
 
 module DeclareMembers =
-    let parameters defineParameter args =
+    let defineParameters defineParameter args =
         args
         |> Seq.iteri (fun i (name, _) ->
             defineParameter(i + 1, ParameterAttributes.None, name)
@@ -204,6 +314,7 @@ module DeclareMembers =
             callconv = callconv
             resultType = resultType
             name = name
+            typeArgs = typeArgs
             args = args
             isForwardref = isForwardref
         }
@@ -218,8 +329,8 @@ module DeclareMembers =
         let a = if isSpecialname then a ||| M.SpecialName else a
         let a = if isRtspecialname then a ||| M.RTSpecialName else a
         let a = match callconv with Instance -> a | Static -> a ||| M.Static
-
-        let argTypes = List.map (snd >> cliType) args
+        
+        let argTypes = List.map snd args
 
         match name with
         | Ctor ->
@@ -228,26 +339,35 @@ module DeclareMembers =
             if isForwardref then
                 c.SetImplementationFlags MethodImplAttributes.ForwardRef
 
-            parameters c.DefineParameter args
-            parent.members.ctors.Add(argTypes, c)
+            defineParameters c.DefineParameter args
+            addCtor env parent argTypes c
 
         | MethodName(Id.L name) ->
             let m = parent.DefineMethod(name, a)
-            let env = { env with thisMethodGenericArgments = [] }
-            let parameterTypes = Seq.map (resolveType env) argTypes |> Seq.toArray           
+            let env =
+                if List.isEmpty typeArgs then env else
+
+                let typeParams = m.DefineGenericParameters(List.toArray typeArgs)
+                let thisArgs =
+                    Seq.map2 (fun t1 t2 -> t1, t2 :> Type) typeArgs typeParams
+                    |> Seq.toList
+
+                { env with methodTypeArgs = thisArgs }
+
+            let parameterTypes = Seq.map (snd >> resolveType env) args |> Seq.toArray      
+            m.SetParameters parameterTypes
+
             let returnType =
                 match resultType with
                 | None -> typeof<Void>
                 | Some t -> resolveType env t
-
-            m.SetParameters parameterTypes
             m.SetReturnType returnType
 
             if isForwardref then
                 m.SetImplementationFlags(MethodImplAttributes.ForwardRef)
 
-            parameters m.DefineParameter args
-            parent.members.methods.Add((name, argTypes), m)
+            defineParameters m.DefineParameter args
+            addMethod env parent (name, argTypes) m
 
     let fieldDef env (parent: TypeBuilder) { access = a; callconv = cc; fieldType = t; name = Id.L name } =
         let a =
@@ -262,7 +382,7 @@ module DeclareMembers =
             | Static -> a ||| F.Static
 
         let f = parent.DefineField(name, resolveType env t, a)
-        parent.members.fields.Add(name, f)
+        addField env parent name f
 
     let rec classDecl env t = function
         | Custom _ -> ()
@@ -274,7 +394,7 @@ module DeclareMembers =
         let t =
             match parent with
             | Choice1Of2 _ -> resolveDynamicTypeOfModules env name
-            | Choice2Of2 t -> t.members.nestedTypes.[name]
+            | Choice2Of2 t -> findNestedType env t name
 
         let env = { env with thisType = Some(upcast t) }
         for decl in decls do classDecl env t decl
@@ -286,7 +406,12 @@ module DeclareMembers =
 module EmitMethods =
     let custom env (t: TypeBuilder) = function
         | { ctor = ctor; args = []; namedArgs = [] } ->
-            t.SetCustomAttribute(resolveConstructor env ctor, [||])
+            let ctor =
+                match resolveMethodBase env ctor with 
+                | MethodInfo m -> failwithf "require constructor; actial: %A" m
+                | ConstructorInfo m -> m
+
+            t.SetCustomAttribute(ctor, [||])
 
         // TODO:
         | _ -> failwith "not implemented"
@@ -315,21 +440,29 @@ module EmitMethods =
         | x when x <= uint16 Byte.MaxValue -> g.Emit(O.Ldarg_S, uint8 x)
         | x -> g.Emit(O.Ldarg, int16 x)
 
-    let rec arrayAccess u1 i4 r8 ref = function
-        | Type.Bool -> u1
-        | Type.Int -> i4
-        | Type.Float -> r8
-        | Type.Array _
-        | Type.Fun _
-        | Type.Unit
-        | Type.Tuple _ -> ref
-        | Type.Var { contents = Some t } -> arrayAccess u1 i4 r8 ref t
-        | Type.Var { contents = None } -> failwith "unexpected type 'Var'"
+    let rec arrayAccess (u1, u2, i4, r8, i, ref, any) env g = function
+        | Bool -> g += u1
+        | Char -> g += u2
+        | Int32 -> g += i4
+        | Float64 -> g += r8
+        | NativeInt -> g += i
+        | Array _
+        | String
+        | Object
+        | TypeRef(kind = type_kind.Class) -> g += ref
 
-    let ldelem t = arrayAccess O.Ldelem_U1 O.Ldelem_I4 O.Ldelem_R8 O.Ldelem_Ref t
-    let stelem t = arrayAccess O.Stelem_I1 O.Stelem_I4 O.Stelem_R8 O.Stelem_Ref t
+        | This
+        | TypeArgmentIndex _
+        | MethodArgmentIndex _
+        | MethodTypeArgument _
+        | TypeRef _ as t -> g.Emit(any, resolveType env t)
 
-    let opcode { env = env; args = args; locals = locals; lavels = lavels } g = function
+    let ldelems = O.Ldelem_U1, O.Ldelem_U2, O.Ldelem_I4, O.Ldelem_R8, O.Ldelem_I, O.Ldelem_Ref, O.Ldelem
+    let stelems = O.Stelem_I1, O.Stelem_I2, O.Stelem_I4, O.Stelem_R8, O.Stelem_I, O.Stelem_Ref, O.Stelem
+    let ldelem env t = arrayAccess ldelems env t
+    let stelem env t = arrayAccess stelems env t
+
+    let opcode { env = env; args = args; locals = locals; labels = labels } g = function
         | Nop -> g += O.Nop
         | Dup -> g += O.Dup
         | Pop -> g += O.Pop
@@ -338,17 +471,22 @@ module EmitMethods =
         | Sub -> g += O.Sub
         | Mul -> g += O.Mul
         | Div -> g += O.Div
+        | ConvU2 -> g += O.Conv_U2
+        | ConvI4 -> g += O.Conv_I4
+        | ConvR8 -> g += O.Conv_R8
+        | ConvOvfU1 -> g += O.Conv_Ovf_U1
         | Ldarg0 -> g += O.Ldarg_0
         | Ldnull -> g += O.Ldnull
         | LdcI4 x -> ldcI4 g x
         | LdcR8 x -> g.Emit(O.Ldc_R8, x)
 
-        | Label(Id.L l) -> g.MarkLabel <| Map.find l lavels
+        | Label(Id.L l) -> g.MarkLabel <| Map.find l labels
 
-        | Br(Id.L l) -> g.Emit(O.Br, Map.find l lavels)
-        | BneUn(Id.L l) -> g.Emit(O.Bne_Un, Map.find l lavels)
-        | Bgt(Id.L l) -> g.Emit(O.Bgt, Map.find l lavels)
-        | Brtrue(Id.L l) -> g.Emit(O.Brtrue, Map.find l lavels)
+        | Br(Id.L l) -> g.Emit(O.Br, Map.find l labels)
+        | BneUn(Id.L l) -> g.Emit(O.Bne_Un, Map.find l labels)
+        | Bgt(Id.L l) -> g.Emit(O.Bgt, Map.find l labels)
+        | Blt(Id.L l) -> g.Emit(O.Blt, Map.find l labels)
+        | Brtrue(Id.L l) -> g.Emit(O.Brtrue, Map.find l labels)
 
         | Ldarg l -> Map.find l args |> ldarg g
         | Ldloc l -> g.Emit(O.Ldloc, Map.find l locals)
@@ -356,15 +494,20 @@ module EmitMethods =
 
         | Call(tail, m) ->
             if tail then g += O.Tailcall
-            g.EmitCall(O.Call, resolveMethod env m, null)
+            match resolveMethodBase env m with
+            | MethodInfo x -> g.EmitCall(O.Call, x, null)
+            | ConstructorInfo x -> g.Emit(O.Call, x)
 
         | Ret -> g += O.Ret
 
-        | Ldelem t -> g += ldelem t
-        | Stelem t -> g += stelem t
+        | Newarr t -> g.Emit(O.Newarr, resolveType env t)
+        | Ldelem t -> ldelem env g t
+        | Stelem t -> stelem env g t
         | Newobj(declaringType, argTypes) ->
             let m = ctorRef(declaringType, argTypes)
-            g.Emit(O.Newobj, resolveConstructor env m)
+            match resolveMethodBase env m with
+            | MethodInfo x -> g.Emit(O.Newobj, x)
+            | ConstructorInfo x -> g.Emit(O.Newobj, x)
 
         | Ldfld f -> g.Emit(O.Ldfld, resolveField env f)
         | Stfld f -> g.Emit(O.Stfld, resolveField env f)
@@ -372,14 +515,14 @@ module EmitMethods =
         | Stsfld f -> g.Emit(O.Stsfld, resolveField env f)
         | Callvirt(tail, m) ->
             if tail then g += O.Tailcall
-            g.EmitCall(O.Callvirt, resolveMethod env m, null)
+            match resolveMethodBase env m with
+            | MethodInfo x -> g.EmitCall(O.Callvirt, x, null)
+            | ConstructorInfo x -> g.Emit(O.Callvirt, x)
 
         | Ldftn m ->
-            match resolveMethodBaseCore env m with
-            | Choice1Of4 x -> g.Emit(O.Ldftn, x)
-            | Choice2Of4 x -> g.Emit(O.Ldftn, x)
-            | Choice3Of4 x -> g.Emit(O.Ldftn, x)
-            | Choice4Of4 x -> g.Emit(O.Ldftn, x)
+            match resolveMethodBase env m with
+            | ConstructorInfo x -> g.Emit(O.Ldftn, x)
+            | MethodInfo x -> g.Emit(O.Ldftn, x)
 
     let methodBody env (g: ILGenerator)
         {
@@ -392,31 +535,38 @@ module EmitMethods =
 
         let offset = match cc with Static -> 0 | Instance -> 1
         let args = Seq.mapi (fun i (n, _) -> n, uint16(i + offset)) args |> Map.ofSeq
-        let locals = Map.map (fun _ t -> cliType t |> resolveType env |> g.DeclareLocal) locals
-        let lavels = Seq.choose (function Label(Id.L l) -> Some(l, g.DefineLabel()) | _ -> None) ops |> Map.ofSeq
+        let locals = Map.map (fun _ t -> resolveType env t |> g.DeclareLocal) locals
+        let labels = Seq.choose (function Label(Id.L l) -> Some(l, g.DefineLabel()) | _ -> None) ops |> Map.ofSeq
         let env = {
             env = env
             args = args
             locals = locals
-            lavels = lavels
+            labels = labels
         }
         for op in ops do opcode env g op
 
-    let methodDef env parent ({ name = name; args = args; body = body } as method') =
-        let argTypes = List.map (snd >> cliType) args
+    let methodDef env parent ({ name = name; typeArgs = typeArgs; args = args; body = body } as method') =
+        let argTypes = List.map snd args
         match name with
         | Ctor ->
-            let c = members(parent).ctors.[argTypes]
+            let c = findCtor env parent argTypes
             methodBody env (c.GetILGenerator()) method'
 
         | MethodName(Id.L name) ->
-            let m = members(parent).methods.[(name, argTypes)]
+            let m =
+                let { methods = methods } = members env parent
+                let argTypes = List.map (normalizeTypeArgumentsCore typeArgs) argTypes
+                getOrThrow methods (name, argTypes)
+
             let env =
-                if m.IsGenericMethod then
-                    { env with
-                        thisMethodGenericArgments = List.ofArray <| m.GetGenericArguments()
-                    }
-                else env
+                if not m.IsGenericMethod then env else
+
+                let typeArgs =
+                    m.GetGenericArguments()
+                    |> Seq.map (fun t -> t.Name, t)
+                    |> Seq.toList
+
+                { env with methodTypeArgs = typeArgs }
 
             if body.isEntrypoint then
                 if Option.isSome !env.entryPoint then
@@ -437,7 +587,7 @@ module EmitMethods =
         let t =
             match parent with
             | Choice1Of2 _ -> resolveDynamicTypeOfModules env name
-            | Choice2Of2 parent -> parent.members.nestedTypes.[name]
+            | Choice2Of2 parent -> findNestedType env parent name
 
         let env = { env with thisType = Some(upcast t) }
         for decl in decls do classDecl env t decl
@@ -446,25 +596,51 @@ module EmitMethods =
         | AssemblyRef _ -> ()
         | Class c -> classDef env (Choice1Of2 a) c
 
-let defineMinCamlAssembly (appDomain: AppDomain) (Prog(def, decls)) =
-    let { assemblyName = assemblyName; moduleName = moduleName } = def
+let mergeLibMinCaml (Prog(def, decls)) =
+    let decls =
+        decls
+        |> List.map (function
+            | Class({ name = Id.L name; decls = decls } as def)
+                when name = Virtual.topLevelTypeName ->
+                Class { def with decls = List.map Method LibmincamlVirtual.decls @ decls }
+            | x -> x
+        )
+    Prog(def, decls)
+
+type dynamic_assembly_settings = {
+    domain: AppDomain
+    access: AssemblyBuilderAccess
+    directory: string option
+    fileName: string option
+}
+
+let defineMinCamlAssembly s p =
+    let { domain = domain; access = access; directory = directory; fileName = fileName } = s
+    let (Prog({ assemblyName = assemblyName; moduleName = moduleName }, decls)) = mergeLibMinCaml p
+
     let assemblyName = String.concat "." assemblyName
     let moduleName =
         match moduleName with
         | [] -> assemblyName + ".exe"
         | _ -> String.concat "." moduleName
 
-    let a = appDomain.DefineDynamicAssembly(AssemblyName assemblyName, AssemblyBuilderAccess.RunAndCollect)
-    let m = a.DefineDynamicModule moduleName
+    let a = domain.DefineDynamicAssembly(AssemblyName assemblyName, access, Option.toObj directory)
+    let m =
+        match fileName with
+        | None -> a.DefineDynamicModule moduleName
+        | Some fileName -> a.DefineDynamicModule(moduleName, fileName)
+
+    let env = Dictionary()
 
     // 1. 型の宣言
-    for d in decls do DeclareTypes.decl m d
+    for d in decls do DeclareTypes.decl env m d
 
     let env = {
         entryPoint = ref None
         modules = [m]
         thisType = None
-        thisMethodGenericArgments = []
+        methodTypeArgs = []
+        typeMembers = env
     }
 
     // 2. ジェネリック制約と継承関係とメンバの宣言
@@ -473,16 +649,16 @@ let defineMinCamlAssembly (appDomain: AppDomain) (Prog(def, decls)) =
     // 3. カスタム属性とメソッド本体の生成
     for d in decls do EmitMethods.decl env m d
     
-    // 4. エントリーポイントの設定
-    match !env.entryPoint with
-    | Some m -> a.SetEntryPoint m
-    | _ -> ()
-
-    // 5. 型の作成
+    // 4. 型の作成
     for m in env.modules do
         for t in m.GetTypes() do
             match t with
             | :? TypeBuilder as t -> t.CreateType() |> ignore
             | _ -> ()
     
+    // 5. エントリーポイントの設定
+    match !env.entryPoint with
+    | Some m -> a.SetEntryPoint m
+    | _ -> ()
+
     a

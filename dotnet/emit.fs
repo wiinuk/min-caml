@@ -49,14 +49,17 @@ let name oc = function
 let rec type' oc = function
     | This -> oc += ".this"
     | Bool -> oc += "bool"
+    | Char -> oc += "char"
     | Int32 -> oc += "int32"
     | Float64 -> oc += "float64"
+    | String -> oc += "string"
     | Object -> oc += "object"
     | NativeInt -> oc += "native int"
     | Array t -> type' oc t; oc += "[]"
+    | MethodTypeArgument x -> oc += "!!"; name oc x
     | TypeArgmentIndex x -> fprintf oc "!%d" x
     | MethodArgmentIndex x -> fprintf oc "!!%d" x
-    | TypeName(kind, moduleName, nameSpace, nestedParents, typeName, typeArgs) ->
+    | TypeRef(kind, moduleName, nameSpace, nestedParents, typeName, typeArgs) ->
         oc += match kind with type_kind.Class -> "class " | ValueType -> "valuetype "
         groupOrEmpty "[" name "." "]" oc moduleName
         for x in nameSpace do (name oc x; oc += ".")
@@ -68,7 +71,7 @@ let resultType oc = function
     | None -> oc += "void"
     | Some t -> type' oc t
 
-let arg oc (x, t) = type' oc <| cliType t; oc += " "; name oc x
+let arg oc (x, t) = type' oc t; oc += " "; name oc x
 let args i oc xs =
     match xs with
     | [] -> oc += "()"
@@ -127,19 +130,27 @@ let ldcR8 oc x =
         // ラウンドトリップ
         fprintf oc "%.17g" x
 
-let rec arrayAccess u1 i4 r8 ref = function
-    | Type.Bool -> u1
-    | Type.Int -> i4
-    | Type.Float -> r8
-    | Type.Array _
-    | Type.Fun _
-    | Type.Unit
-    | Type.Tuple _ -> ref
-    | Type.Var { contents = Some t } -> arrayAccess u1 i4 r8 ref t
-    | Type.Var { contents = None } -> failwith "unexpected type 'Var'"
+let rec arrayAccess (u1, u2, i4, r8, i, ref, any) oc = function
+    | Bool -> oc += u1
+    | Char -> oc += u2
+    | Int32 -> oc += i4
+    | Float64 -> oc += r8
+    | NativeInt -> oc += i
+    | Array _
+    | String
+    | Object
+    | TypeRef(kind = type_kind.Class) -> oc += ref
 
-let ldelem t = arrayAccess "ldelem.u1" "ldelem.i4" "ldelem.r8" "ldelem.ref" t
-let stelem t = arrayAccess "stelem.i1" "stelem.i4" "stelem.r8" "stelem.ref" t
+    | This
+    | TypeArgmentIndex _
+    | MethodArgmentIndex _
+    | MethodTypeArgument _
+    | TypeRef _ as t -> oc += any; oc += " "; type' oc t
+
+let ldelems = "ldelem.u1", "ldelem.u2", "ldelem.i4", "ldelem.r8", "ldelem.i", "ldelem.ref", "ldelem"
+let stelems = "stelem.i1", "stelem.i2", "stelem.i4", "stelem.r8", "stelem.i", "stelem.ref", "stelem"
+let ldelem oc t = arrayAccess ldelems oc t
+let stelem oc t = arrayAccess stelems oc t
 
 /// 命令のアセンブリ生成 (caml2html: emit_gprime)
 let opcode oc = function
@@ -153,6 +164,12 @@ let opcode oc = function
     | Sub -> oc += "sub"
     | Mul -> oc += "mul"
     | Div -> oc += "div"
+    
+    | ConvU2 -> oc += "conv.u2"
+    | ConvI4 -> oc += "conv.i4"
+    | ConvR8 -> oc += "conv.r8"
+    | ConvOvfU1 -> oc += "conv.ovf.u1"
+
     | Ldarg0 -> oc += "ldarg.0"
     | Ldnull -> oc += "ldnull"
     | LdcI4 x -> ldcI4 oc x
@@ -161,8 +178,9 @@ let opcode oc = function
     | Br(Id.L l) -> oc += "br "; name oc l
     | BneUn(Id.L l) -> oc += "bne.un "; name oc l
     | Bgt(Id.L l) -> oc += "bgt "; name oc l
+    | Blt(Id.L l) -> oc += "blt "; name oc l
     | Brtrue(Id.L l) -> oc += "brtrue "; name oc l
-
+    
     | Ldarg l -> oc += "ldarg "; name oc l
     | Ldloc l -> oc += "ldloc "; name oc l
     | Stloc l -> oc += "stloc "; name oc l
@@ -173,8 +191,10 @@ let opcode oc = function
 
     | Ret -> oc += "ret"
 
-    | Ldelem t -> oc += ldelem t
-    | Stelem t -> oc += stelem t
+    | Newarr t -> oc += "newarr "; type' oc t
+    | Ldelem t -> ldelem oc t
+    | Stelem t -> stelem oc t
+
     | Newobj(declaringType, argTypes) ->
         fprintf oc "newobj instance void "
         type' oc declaringType
@@ -246,7 +266,8 @@ let methodDef i oc
         isRtspecialname = isRtspecialname
         callconv = callconv
         resultType = r
-        name = name
+        name = n
+        typeArgs = typeArgs
         args = xs
         isForwardref = isForwardref
         body = body
@@ -260,7 +281,8 @@ let methodDef i oc
     oc += match callconv with Instance -> "instance " | Static -> "static "
     resultType oc r
     oc += " "
-    methodName oc name
+    methodName oc n
+    groupOrEmpty "<" name ", " ">" oc typeArgs
     args i oc xs
 
     // 23.1.11[MethodImplAttributes] IL = 0x0000; managed = 0x0000
