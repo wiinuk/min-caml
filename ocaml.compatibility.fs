@@ -35,8 +35,6 @@ module Pervasives =
         let s = new FileStream(s, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize = 0x1000)
         new StreamReader(s, defaultEncoding, detectEncodingFromByteOrderMarks = false)
 
-    // Open_text; Open_wronly; Open_creat
-
     let open_out s =
         let s = new FileStream(s, FileMode.Create, FileAccess.Write, FileShare.Read, bufferSize = 0x1000)
         new StreamWriter(s, defaultEncoding)

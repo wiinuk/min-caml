@@ -202,6 +202,22 @@ let resolveField env { declaringType = parent; name = Id.L name } =
 
 let raiseMethodNotFound m = failwithf "method not found; name: %A" m
 
+let resolveRuntimeMethodBase (t: Type) m getMethodBase =
+    match getMethodBase t with
+    | null when t.IsGenericType ->
+        match t.GetGenericTypeDefinition() |> getMethodBase with
+        | null -> raiseMethodNotFound m
+        | (methodInTypeDef: #MethodBase) ->
+            let token = methodInTypeDef.MetadataToken
+            t.GetMembers()
+            |> Seq.choose (function
+                | :? 'T as m when m.MetadataToken = token -> Some m
+                | _ -> None
+            )
+            |> Seq.exactlyOne
+
+    | null -> raiseMethodNotFound m
+    | m -> m
 
 let resolveMethodBase env m =
     let {
@@ -215,26 +231,22 @@ let resolveMethodBase env m =
 
     let typeArgs = List.map (resolveType env) typeArgs
     let t = resolveType env parent
-    let env = {
-        env with
-            methodTypeArgs = List.map (fun t -> "", t) typeArgs
-            thisType = Some t
-    }
+    let env = { env with thisType = Some t }
+    let a = B.DeclaredOnly ||| B.Public ||| B.NonPublic
+    let a = a ||| (match cc with Instance -> B.Instance | Static -> B.Static)
     match name with
     | Ctor ->
-        let a = B.DeclaredOnly ||| B.Public ||| B.NonPublic ||| B.Instance
         match t with
         | :? TypeBuilder as t -> ConstructorInfo <| upcast findCtor env t argTypes
         | _ ->
 
         let argTypes = [|for t in argTypes -> resolveType env t|]
-        match t.GetConstructor(a, null, argTypes, null) with
-        | null -> raiseMethodNotFound m
-        | m -> ConstructorInfo m
+        resolveRuntimeMethodBase t m (fun t ->
+            t.GetConstructor(a, null, argTypes, null)
+        )
+        |> ConstructorInfo
 
     | MethodName(Id.L name) ->
-        let a = B.DeclaredOnly ||| B.Public ||| B.NonPublic
-        let a = match cc with Instance -> a ||| B.Instance | Static -> a ||| B.Static
         match t with
         | :? TypeBuilder as t ->
             let m = findMethod env t (name, argTypes)
@@ -245,24 +257,25 @@ let resolveMethodBase env m =
         | _ ->
 
         let argTypes = [|for t in argTypes -> resolveType env t|]
-        match t.GetMethod(name, a, null, argTypes, null) with
-        | null when t.IsGenericType ->
-            match t.GetGenericTypeDefinition().GetMethod(name, a, null, argTypes, null)  with
-            | null -> raiseMethodNotFound m
-            | m -> MethodInfo m
-        | null -> raiseMethodNotFound m
-        | m -> MethodInfo m
+        resolveRuntimeMethodBase t m (fun t ->
+            t.GetMethod(name, a, null, argTypes, null)
+        )
+        |> MethodInfo
 
 module DeclareTypes =
     let defineType defineType a
         {
+            isAbstract = isAbstract
             isSealed = isSealed
             isBeforefieldinit = isBeforefieldinit
             name = Id.L name
         }
         =
-        let a = if isSealed then a ||| T.Sealed else a
-        let a = if isBeforefieldinit then a ||| T.BeforeFieldInit else a
+        let a = a
+            ||| (if isAbstract then T.Abstract else enum 0)
+            ||| (if isSealed then T.Sealed else enum 0)
+            ||| (if isBeforefieldinit then T.BeforeFieldInit else enum 0)
+
         defineType(escapeTypeName name, a)
 
     let rec classDecl env t = function
@@ -277,9 +290,9 @@ module DeclareTypes =
             | Choice1Of2(parent: ModuleBuilder) ->
                 let a =
                     match access with
-                    | Default -> enum 0
+                    | Default -> T.NotPublic
                     | Public -> T.Public
-                    | Private -> enum 0
+                    | Private -> T.NotPublic
                 defineType parent.DefineType a c
 
             | Choice2Of2(parent: TypeBuilder) ->
@@ -325,10 +338,12 @@ module DeclareMembers =
             | Private -> M.Private
             | Default -> enum 0
 
-        let a = a ||| M.HideBySig
-        let a = if isSpecialname then a ||| M.SpecialName else a
-        let a = if isRtspecialname then a ||| M.RTSpecialName else a
-        let a = match callconv with Instance -> a | Static -> a ||| M.Static
+        let a =
+            a
+            ||| M.HideBySig
+            ||| (if isSpecialname then M.SpecialName else enum 0)
+            ||| (if isRtspecialname then M.RTSpecialName else enum 0)
+            ||| (match callconv with Static -> M.Static | Instance -> enum 0)
         
         let argTypes = List.map snd args
 
@@ -377,9 +392,8 @@ module DeclareMembers =
             | Default -> enum 0
 
         let a =
-            match cc with
-            | Instance -> a
-            | Static -> a ||| F.Static
+            a
+            ||| (match cc with Instance -> enum 0 | Static -> F.Static)
 
         let f = parent.DefineField(name, resolveType env t, a)
         addField env parent name f
@@ -535,7 +549,7 @@ module EmitMethods =
 
         let offset = match cc with Static -> 0 | Instance -> 1
         let args = Seq.mapi (fun i (n, _) -> n, uint16(i + offset)) args |> Map.ofSeq
-        let locals = Map.map (fun _ t -> resolveType env t |> g.DeclareLocal) locals
+        let locals = Seq.map (fun (x, t) -> x, resolveType env t |> g.DeclareLocal) locals |> Map.ofSeq
         let labels = Seq.choose (function Label(Id.L l) -> Some(l, g.DefineLabel()) | _ -> None) ops |> Map.ofSeq
         let env = {
             env = env
@@ -611,11 +625,17 @@ type dynamic_assembly_settings = {
     domain: AppDomain
     access: AssemblyBuilderAccess
     directory: string option
-    fileName: string option
+    moduleFileName: string option
+}
+let DynamicAssemblySettings domain = {
+    domain = domain
+    access = AssemblyBuilderAccess.RunAndSave
+    directory = None
+    moduleFileName = None
 }
 
 let defineMinCamlAssembly s p =
-    let { domain = domain; access = access; directory = directory; fileName = fileName } = s
+    let { domain = domain; access = access; directory = directory; moduleFileName = fileName } = s
     let (Prog({ assemblyName = assemblyName; moduleName = moduleName }, decls)) = mergeLibMinCaml p
 
     let assemblyName = String.concat "." assemblyName

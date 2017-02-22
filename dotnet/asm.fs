@@ -154,7 +154,7 @@ type method_body = {
     isEntrypoint: bool
 
     /// .locals init (...)
-    locals: Map<Id.t, cli_type>
+    locals: (Id.t * cli_type) list
     opcodes: t
 }
 
@@ -220,7 +220,7 @@ let methodRef(callconv, resultType, declaringType, methodName, typeArgs, argType
     resultType = resultType
     declaringType = declaringType
     typeArgs = typeArgs
-    methodName = MethodName methodName
+    methodName = MethodName <| Id.L methodName
     argTypes = argTypes
 }
 let ctorRef(declaringType, argTypes) = {
@@ -232,19 +232,16 @@ let ctorRef(declaringType, argTypes) = {
     argTypes = argTypes
 }
 
-let call(tail, callconv, resultType, declaringType, name, typeArgs, argTypes) =
-    Call(tail, methodRef(callconv, resultType, declaringType, name, typeArgs, argTypes))
+let call(callconv, resultType, declaringType, name, typeArgs, argTypes) =
+    Call(false, methodRef(callconv, resultType, declaringType, name, typeArgs, argTypes))
 
 let getProp(callconv, propertyType, declaringType, propertyName) =
-    call(false, callconv, Some propertyType, declaringType, Id.L("get_" + propertyName), [], [])
+    call(callconv, Some propertyType, declaringType, "get_" + propertyName, [], [])
 
-let ldftn(resultType, declaringType, name, argTypes) =
-    Ldftn <| methodRef(Instance, resultType, declaringType, Id.L name, [], argTypes)
+let callvirt(resultType, declaringType, name, argTypes) =
+    Callvirt(false, methodRef(Instance, resultType, declaringType, name, [], argTypes))
 
-let callvirt(tail, resultType, declaringType, name, argTypes) =
-    Callvirt(tail, methodRef(Instance, resultType, declaringType, Id.L name, [], argTypes))
-
-let ctorDef(access, args, isForwardref, body) = {
+let ctorDef (access, args) (maxStack, locals) opcodes = {
     access = access
     isSpecialname = true
     isRtspecialname = true
@@ -253,56 +250,92 @@ let ctorDef(access, args, isForwardref, body) = {
     name = Ctor
     typeArgs = []
     args = args
-    isForwardref = isForwardref
-    body = body
+    isForwardref = false
+    body =
+    {
+        isEntrypoint = false
+        maxStack = maxStack
+        locals = locals
+        opcodes = opcodes
+    }
 }
 
-let methodDef(access, callconv, resultType, name, typeArgs, args, body) = {
+let methodDef (access, callconv, resultType, name, typeArgs, args) (maxStack, locals) opcodes = {
     access = access
     isSpecialname = false
     isRtspecialname = false
     callconv = callconv
     resultType = resultType
-    name = MethodName <| Id.L name
+    name = MethodName name
     typeArgs = typeArgs
     args = args
     isForwardref = false
-    body = body
+    body = 
+    {
+        isEntrypoint = false
+        maxStack = maxStack
+        locals = locals
+        opcodes = opcodes
+    }
 }
 
-let defaultCtor =
-    let body = {
-        maxStack = None
-        isEntrypoint = false
-        locals = Map.empty
-        opcodes =
-        [
-            Ldarg0
-            Call(false, ctorRef(Object, []))
-            Ret
-        ]
+// type entry_point_arg_type = String Array option
+// type entry_point_result_type = Void | Int32 | UInt32
+let entryPointDef (access, name, argsName) (maxStack, locals) opcodes = {
+    access = access
+    isSpecialname = false
+    isRtspecialname = false
+    callconv = Static
+    resultType = None
+    name = MethodName name
+    typeArgs = []
+    args = match argsName with None -> [] | Some n -> [n, Array String]
+    isForwardref = false
+    body =
+    {
+        isEntrypoint = true
+        maxStack = maxStack
+        locals = locals
+        opcodes = opcodes
     }
-    ctorDef(Public, [], false, body)
+}
+
+
+let defaultCtor =
+    ctorDef (Public, []) (None, []) [
+        Ldarg0
+        Call(false, ctorRef(Object, []))
+        Ret
+    ]
 
 let brinst x = Brtrue x
 
-let fieldSpec(access, callconv, fieldType, declaringType, name) =
-    let ref = {
-        fieldType = fieldType
-        declaringType = declaringType
-        name = name
-    }
-    let def = {
-        access = access
-        callconv = callconv
-        fieldType = fieldType
-        name = name
-    }
-    ref, def
-
-let field(access, fieldType, name) = Field {
+let fieldDef(access, callconv, fieldType, name) = {
     access = access
-    callconv = Instance
+    callconv = callconv
     fieldType = fieldType
     name = name
+}
+let fieldRef(fieldType, declaringType, name) = {
+    fieldType = fieldType
+    declaringType = declaringType
+    name = name
+}
+let fieldSpec(access, callconv, fieldType, declaringType, name) =
+    let ref = fieldRef(fieldType, declaringType, name)
+    let def = fieldDef(access, callconv, fieldType, name)
+    ref, def
+
+let field(access, callconv, fieldType, name) =
+    fieldDef(access, callconv, fieldType, name)
+    |> Field
+
+type class_kind = Abstract | Sealed | StaticClass | Inheritable
+let classDef (access, kind, name) decls = {
+    access = access
+    isAbstract = match kind with Abstract | StaticClass -> true | Sealed | Inheritable -> false
+    isSealed = match kind with Sealed | StaticClass -> true | Abstract | Inheritable -> false
+    isBeforefieldinit = true
+    name = Id.L name
+    decls = decls
 }

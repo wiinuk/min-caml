@@ -43,17 +43,12 @@ let consoleType = clitypeof<System.Console>
 let textWriterType =  clitypeof<System.IO.TextWriter>
 let getConsoleError = getProp(Static, textWriterType, consoleType, "Error")
 
-let callStatic(resultType, declaringType, name, typeArgs, args) =
-    call(false, Static, resultType, declaringType, Id.L name, typeArgs, args)
 
 let libMethodDefCore (resultType, name, typeArgs, args) (maxStack, locals) opcodes =
-    let body = {
-        isEntrypoint = false
-        maxStack = maxStack
-        locals = Map.ofList locals
-        opcodes = opcodes @ [Ret]
-    }
-    methodDef(Public, Static, Some resultType, name, typeArgs, args, body)
+    methodDef
+        (Public, Static, Some resultType, Id.L name, typeArgs, args)
+        (maxStack, locals)
+        (opcodes @ [Ret])
 
 let libMethodDef (resultType, name, args) opcodes =
     libMethodDefCore (resultType, name, [], args) (None, []) opcodes
@@ -63,37 +58,37 @@ let libConvMethodDef outputType libName inputType convop =
 
 let libReadParseMethodDef outputType libName =
     libMethodDef(outputType, libName, ["_arg1", unitType]) [
-        callStatic(Some String, consoleType, "ReadLine", [], [])
-        callStatic(Some outputType, outputType, "Parse", [], [String])
+        call(Static, Some String, consoleType, "ReadLine", [], [])
+        call(Static, Some outputType, outputType, "Parse", [], [String])
     ]
 
 let libMathMethodDef libName mathName =
-    callStatic(Some Float64, clitypeof<System.Math>, mathName, [], [Float64])
+    call(Static, Some Float64, clitypeof<System.Math>, mathName, [], [Float64])
     |> libConvMethodDef Float64 libName Float64
 
 let (!!) x = MethodTypeArgument x
 
 let decls = [
     libMethodDef(unitType, "min_caml_print_newline", ["_arg1", unitType]) [
-        callStatic(None, consoleType, "WriteLine", [], [])
+        call(Static, None, consoleType, "WriteLine", [], [])
         Ldnull
     ]
     libMethodDef(unitType, "min_caml_print_int", ["x", Int32]) [
         Ldarg0
-        callStatic(None, consoleType, "Write", [], [Int32])
+        call(Static, None, consoleType, "Write", [], [Int32])
         Ldnull
     ]
     libMethodDef(unitType, "min_caml_print_byte", ["x", Int32]) [
         Ldarg0
         ConvOvfU1
         ConvU2
-        callStatic(None, consoleType, "Write", [], [Char])
+        call(Static, None, consoleType, "Write", [], [Char])
         Ldnull
     ]
     libMethodDef(unitType, "min_caml_prerr_int", ["x", Int32]) [
         getConsoleError
         Ldarg0
-        callvirt(false, None, textWriterType, "Write", [Int32])
+        callvirt(None, textWriterType, "Write", [Int32])
         Ldnull
     ]
     libMethodDef(unitType, "min_caml_prerr_byte", ["x", Int32]) [
@@ -101,13 +96,13 @@ let decls = [
         Ldarg0
         ConvOvfU1
         ConvU2
-        callvirt(false, None, textWriterType, "Write", [Char])
+        callvirt(None, textWriterType, "Write", [Char])
         Ldnull
     ]
     libMethodDef(unitType, "min_caml_prerr_float", ["x", Float64]) [
         getConsoleError
         Ldarg0
-        callvirt(false, None, textWriterType, "Write", [Float64])
+        callvirt(None, textWriterType, "Write", [Float64])
         Ldnull
     ]
     libReadParseMethodDef Int32 "min_caml_read_int"
@@ -153,7 +148,7 @@ let decls = [
     libMethodDef(Array Float64, "min_caml_create_float_array", ["n", Int32; "x", Float64]) [
         Ldarg0
         Ldarg "x"
-        callStatic(Some(Array(MethodArgmentIndex 0)), Virtual.topLevelType, "min_caml_create_array", [Float64], [Int32; MethodArgmentIndex 0])
+        call(Static, Some(Array(MethodArgmentIndex 0)), Virtual.topLevelType, "min_caml_create_array", [Float64], [Int32; MethodArgmentIndex 0])
     ]
     libConvMethodDef Int32 "min_caml_int_of_float" Float64 ConvI4
     libConvMethodDef Int32 "min_caml_truncate" Float64 ConvI4

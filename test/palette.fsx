@@ -84,15 +84,11 @@ let a =
     |> StackAlloc.f
     |> Virtual.f'
     |> DynamicAssembly.defineMinCamlAssembly {
-        domain = System.AppDomain.CurrentDomain
-        access = System.Reflection.Emit.AssemblyBuilderAccess.RunAndSave
-        directory = Some __SOURCE_DIRECTORY__
-        fileName = None
+        DynamicAssembly.DynamicAssemblySettings System.AppDomain.CurrentDomain with
+            directory = Some __SOURCE_DIRECTORY__
     }
 
 type B = System.Reflection.BindingFlags
-typeof<Test.Tester>.Assembly.GetType("Ack")
-    .GetConstructors(B.Static)
 
 let w = new System.IO.StringWriter()
 System.Console.SetOut w
@@ -165,6 +161,9 @@ do
 
 #r "bin/Debug/MinCaml.Compiler.Test.dll"
 open ExtraOperators
+open System
+open System.IO
+open System.Reflection.Emit
 
 cd <| __SOURCE_DIRECTORY__/"bin/debug/sources"
 pwd
@@ -239,9 +238,27 @@ Test.testOnce "ack" |> Async.RunSynchronously
 childItem.get "*.ml.exe"
     % exe peverify "%A /verbose"
 
-exe "min-caml" "ack"
+let target = "adder.mld.exe"
 
-let target = __SOURCE_DIRECTORY__/"MinCamlGlobal.exe"
+"
+let rec apply f x = f x in
+let rec incr x = x + 1 in
+print_int(apply incr 10)
+"
+|> Lexing.from_string
+|> Test.parse 1000
+|> DynamicAssembly.defineMinCamlAssembly {
+    DynamicAssembly.DynamicAssemblySettings AppDomain.CurrentDomain with
+        access = AssemblyBuilderAccess.Save
+        moduleFileName = Some target
+}
+//|> fun minCamlAssembly ->
+//    let topLevel = minCamlAssembly.GetType Virtual.topLevelTypeName
+//    let main = topLevel.GetMethod Virtual.entryPointMethodName
+//    main.Invoke(null, [||]) |> ignore
+
+|> fun a -> a.Save target
+
 exe ildasm "%s -text" target
 exe peverify "%s -verbose" target
 
@@ -250,16 +267,3 @@ exe ilasm "libmincaml.il matmul.il -out=matmul.ml.exe"
 
 exe "matmul.ml.exe" ""
 exe "matmul.fs.exe" ""
-
-
-open System
-open System.Reflection
-open System.Reflection.Emit
-
-let a = AppDomain.CurrentDomain.DefineDynamicAssembly(AssemblyName "Assembly0", AssemblyBuilderAccess.Run)
-let m = a.DefineDynamicModule("Module0")
-/// System.Reflection.Emit.ModuleBuilder m = ...
-
-m.DefineType("'Ty.pe0'").Name // "pe0'"
-m.DefineType("\"Ty.pe0\"").Name // "pe0\""
-m.DefineType("Ty\\.pe0").Name // "pe0"

@@ -252,10 +252,10 @@ let methodBody i oc { maxStack = maxStack; isEntrypoint = isEntrypoint; locals =
         newline oc i
         oc += ".entrypoint"
 
-    if not <| Map.isEmpty locals then
+    if not <| List.isEmpty locals then
         newline oc i
         oc += ".locals init "
-        args i oc <| Map.toList locals
+        args i oc locals
 
     opcodes i oc ops
 

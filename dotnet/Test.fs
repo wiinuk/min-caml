@@ -119,50 +119,27 @@ let rec iter n e =
 
 let parseClosure =
     let gate = obj()
-    fun c b -> lock gate <| fun _ ->
+    fun iterationCount b -> lock gate <| fun _ ->
         Id.counter := 0
         Typing.extenv := M.empty
         Parser.exp Lexer.token b
         |> Typing.f
         |> KNormal.f
         |> Alpha.f
-        |> iter c
+        |> iter iterationCount
         |> Closure.f
 
-let parse c b =
-    parseClosure c b
+let parse iterationCount b =
+    parseClosure iterationCount b
     |> Tree.f
     |> StackAlloc.f
     |> Virtual.f'
 
-type Tester() =
-    inherit System.MarshalByRefObject()
-    member __.Test a =
-        let minCamlAssembly =
-            a
-            |> DynamicAssembly.defineMinCamlAssembly {
-                domain = AppDomain.CurrentDomain
-                access = AssemblyBuilderAccess.Run
-                directory = None
-                fileName = None
-            }
-
-        let topLevel = minCamlAssembly.GetType Virtual.topLevelTypeName
-        let main = topLevel.GetMethod Virtual.entryPointMethodName
-        
-        use w = new StringWriter()
-        Console.SetOut w
-        main.Invoke(null, [||]) |> ignore
-        w.Flush()
-        w.GetStringBuilder().ToString()
-
-let invokeInSandbox name f =
-    let sandbox =
-        let d = System.AppDomain.CurrentDomain
-        AppDomain.CreateDomain(sprintf "sandbox: %s" name, d.Evidence, d.SetupInformation)
-
-    try sandbox.DoCallBack(CrossAppDomainDelegate f)
-    finally AppDomain.Unload sandbox
+let compileFileToAssembly sourcePath iterationCount assemblySettings =
+    open_in sourcePath
+    |> Lexing.from_channel
+    |> parse iterationCount
+    |> DynamicAssembly.defineMinCamlAssembly assemblySettings
 
 let recordStdout f =
     let oldout = stdout
@@ -176,19 +153,10 @@ let recordStdout f =
         Console.SetOut oldout
 
 let invokeML sourceML =
-    let a =
-        File.ReadAllText sourceML
-        |> Lexing.from_string
-        |> parse 1000
-
-    let minCamlAssembly =
-        a
-        |> DynamicAssembly.defineMinCamlAssembly {
-            domain = AppDomain.CurrentDomain
+    let minCamlAssembly = compileFileToAssembly sourceML 1000 {
+        DynamicAssembly.DynamicAssemblySettings AppDomain.CurrentDomain with
             access = AssemblyBuilderAccess.RunAndCollect
-            directory = None
-            fileName = None
-        }
+    }
 
     let topLevel = minCamlAssembly.GetType Virtual.topLevelTypeName
     let main = topLevel.GetMethod Virtual.entryPointMethodName
