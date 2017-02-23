@@ -11,7 +11,8 @@ let isOneOrZero k e =
 
         | Condition(e1, _, e2, e3, e4) -> countMany [e1; e2; e3; e4]
 
-        | MakeCls(_, { actual_fv = les }, e) -> countMany (e::List.map snd les)
+        | Cls(_, { actual_fv = les }) -> countMany (List.map snd les)
+        | LetCls(_, { actual_fv = les }, e) -> countMany (e::List.map snd les)
         | AppCls(e, es) -> countMany (e::es)
         | AppDir(_, es) | Tuple es -> countMany es
         | Put(e1, e2, e3) -> countMany [e1; e2; e3]
@@ -29,15 +30,15 @@ type cost = LiteralLike | PureOperation | NoPure
 
 let rec cost = function
     | Unit | Int _ | Float _ | Var _ | ExtArray _ -> LiteralLike
-    | AppCls _ | AppDir _ | Put _ -> NoPure
+    | AppCls _ | AppDir _ | Put _ | Get _ -> NoPure
 
     | Binary(e1, _, e2)
     | Let(_, e1, e2)
     | LetTuple(_, e1, e2)
-    | Get(e1, e2)
     | Seq(e1, e2) -> manyCost PureOperation [e1; e2]
     | Unary(_, e1) -> manyCost PureOperation [e1]
-    | MakeCls(_, { actual_fv = les }, e1) -> List.map snd les@[e1] |> manyCost PureOperation
+    | Cls(_, { actual_fv = les }) -> List.map snd les |> manyCost PureOperation
+    | LetCls(_, { actual_fv = les }, e1) -> List.map snd les@[e1] |> manyCost PureOperation
 
     | Condition(e1, _, e2, e3, e4) -> manyCost PureOperation [e1; e2; e3; e4]
     | Tuple es -> manyCost PureOperation es
@@ -52,13 +53,13 @@ and manyCost acc xs =
     aux acc xs
 
 let rec expr map = function
-    | Let((x1, t1), e1, scope) ->
+    | Let((x1, t1) as xt1, e1, scope) ->
         let e1 = expr map e1
         match cost e1 with
-        | LiteralLike
+        | LiteralLike -> expr (Map.add x1 e1 map) scope
         | PureOperation when isOneOrZero x1 scope -> expr (Map.add x1 e1 map) scope
         | _ when t1 = Type.Unit -> Seq(e1, expr (Map.add x1 Unit map) scope)
-        | _ -> Let((x1, t1), expr map e1, expr map scope)
+        | _ -> Let(xt1, e1, expr map scope)
 
     | Var x as e -> if Map.containsKey x map then Map.find x map else e
 
@@ -69,9 +70,12 @@ let rec expr map = function
     | Unary(op, e) -> Unary(op, expr map e)
     | Binary(e1, op, e2) -> Binary(expr map e1, op, expr map e2)
     | Condition(e1, op, e2, e3, e4) -> Condition(expr map e1, op, expr map e2, expr map e3, expr map e4)
-    | MakeCls(xt, ({ actual_fv = les } as c), e) ->
+    | LetCls(xt, ({ actual_fv = les } as c), e) ->
         let c = { c with actual_fv = List.map (fun (l, e) -> l, expr map e) les }
-        MakeCls(xt, c, expr map e)
+        LetCls(xt, c, expr map e)
+
+    | Cls(t, ({ actual_fv = les } as c)) ->
+        Cls(t, { c with actual_fv = List.map (fun (l, e) -> l, expr map e) les })
 
     | AppCls(e, es) -> AppCls(expr map e, List.map (expr map) es)
     | AppDir(x, es) -> AppDir(x, List.map (expr map) es)

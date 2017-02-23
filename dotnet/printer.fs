@@ -199,7 +199,18 @@ module TreePrinter =
             yield! exp i e2
 
         | Var x -> yield x
-        | MakeCls(xt, { entry = Id.L entry; actual_fv = actual_fv }, e2) ->
+        | Cls(_, { entry = Id.L entry; actual_fv = actual_fv }) ->
+            yield entry
+            yield!
+                actual_fv
+                |> Seq.map (fun (Id.L l, e) -> seq {
+                    yield l
+                    yield " = "
+                    yield! exp (i + 1) e 
+                })
+                |> wrap "{" ", " "}"
+
+        | LetCls(xt, { entry = Id.L entry; actual_fv = actual_fv }, e2) ->
             yield! typed xt
             yield " = "
             yield entry

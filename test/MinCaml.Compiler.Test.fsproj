@@ -207,6 +207,9 @@
     <Compile Include="..\dotnet\shell.fsx">
       <Link>shell.fsx</Link>
     </Compile>
+    <Compile Include="..\dotnet\distributionWriter.fs">
+      <Link>distributionWriter.fs</Link>
+    </Compile>
     <Compile Include="..\dotnet\libmincamlVirtual.fs">
       <Link>libmincamlVirtual.fs</Link>
     </Compile>

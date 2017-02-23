@@ -113,6 +113,59 @@ let private getCliFunctionElements t =
     let ts, t = getFunctionElements t
     List.map cliType ts, cliType t
 
+// デリゲートをキャッシュして使いまわす
+// NOTE: デリゲートをキャッシュする操作はスレッドセーフでないが、二重にインスタンスが生成されるぐらいで特に問題ないはず
+//
+// [cs|
+// var @temp = $methodName
+// (@temp === null) ? ($methodName = new System.Func<…>(…)) : @temp
+// |]
+//
+// [il|
+// ldsfld $methodName   // Func<…>
+// dup                  // Func<…>; Func<…>
+// brinst 'created'     // (null: Func<…>)
+//     ldftn …          // null; ((…) => …)*
+//     newobj System.Func<…> // Func<…>
+//     dup              // Func<…>; Func<…>
+//     stsfld $methodName    // Func<…>
+// 'created':       // Func<…>
+// |] 
+let getOrCreateStaticCachedDelegate env m (Id.L name' as globalFieldName) acc =
+    let { globalEnv = { globalCaches = caches } } = env
+    let { argTypes = argTypes; resultType = resultType } = m
+    let funcType = funType argTypes resultType
+
+    let fieldRef, fieldDef = fieldSpec(Private, Static, funcType, cli_type.This, globalFieldName)
+
+    caches := Map.add name' fieldDef !caches
+
+    let created = Id.L <| Id.genid "created"
+
+    acc
+    ++Ldsfld fieldRef
+    ++Dup
+    ++brinst created
+    
+    // ECMA-335 2012 Ⅲ.4.21
+    //
+    // デリゲートを作成する時の正当性検証可能な CIL コード
+    //
+    // dup
+    // ldvirtftn $virtualFunction
+    // newobj $ctor
+    //
+    // または
+    //
+    // ldftn $function
+    // newobj $ctor
+    ++Ldftn m
+    ++Newobj(funcType, [Object; NativeInt])
+
+    ++Dup
+    ++Stsfld fieldRef
+    ++Label created
+
 let ld ({ vars = vars } as env) id acc =
     let t, location = Map.find id vars
     match location with
@@ -125,43 +178,11 @@ let ld ({ vars = vars } as env) id acc =
         ++Ldfld(fieldRef(cliType t, cli_type.This, Id.L id))
 
     | StaticMethodSelf ->
-        let { globalEnv = { globalCaches = caches }; methodName = Id.L methodName as name } = env
+        let { env.methodName = name } = env
         let argTypes, resultType = getCliFunctionElements t
-        let funcType = funType argTypes resultType
-        
-        // デリゲートをキャッシュして使いまわす
-        //
-        // [cs|
-        // var @temp = $methodName
-        // (@temp === null) ? ($methodName = new System.Func<…>(…)) : @temp
-        // |]
-        //
-        // [il|
-        // ldsfld $methodName   // Func<…>
-        // dup                  // Func<…>; Func<…>
-        // brinst 'created'     // (null: Func<…>)
-        //     ldftn …          // null; ((…) => …)*
-        //     newobj System.Func<…> // Func<…>
-        //     dup              // Func<…>; Func<…>
-        //     stsfld $methodName    // Func<…>
-        // 'created': nop       // Func<…>
-        // |]
-        
-        let fieldRef, fieldDef = fieldSpec(accesibility.Private, Static, funcType, cli_type.This, name)
-
-        caches := Map.add methodName fieldDef !caches
-
-        let created = Id.L <| Id.genid "created"
-
+        let m = methodRef(Static, Some resultType, topLevelType, id, [], argTypes)
         acc
-        ++Ldsfld fieldRef
-        ++Dup
-        ++brinst created
-        ++Ldftn(methodRef(Static, Some resultType, topLevelType, id, [], argTypes))
-        ++Newobj(funcType, [Object; NativeInt])
-        ++Dup
-        ++Stsfld fieldRef
-        ++Label created
+        +>getOrCreateStaticCachedDelegate env m name
         ++Nop
 
 let many xs f acc = List.fold (fun acc x -> f x acc) acc xs
@@ -186,6 +207,7 @@ let map = {
     P.find = fun k map -> Map.find k map |> fst
 }
 
+// TODO: locals の使用状況を vars から解析して、locals をできるだけ減らす
 /// 式の仮想マシンコード生成 (caml2html: virtual_g)
 let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
     match x with
@@ -242,45 +264,35 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
 
     // クロージャの生成 (caml2html: virtual_makecls)
 
-    // TODO: デリゲートをキャッシュして使いまわす
     // 静的メソッドから Func<…> を作成
-    | P.MakeCls((x, t), { P.entry = Id.L l; P.actual_fv = [] }, e2) ->
-        // ldnull
-        // ldftn static $(resultType t) $topLevelType::$l($(argType t 0), $(argType t 1), …)
-        // newobj instance void class [mscorlib]System.Func`…<$(ts.[0]), $(ts.[1]), …, $r>::.ctor(object, native int)
-        // stloc $x
-        //
-        // $e2
-
-        let argTypes, resultType = getCliFunctionElements t
-        let funcType = funType argTypes resultType
-
-        let acc =
-            acc
-            ++Ldnull
-
-            // ECMA-335 2012 Ⅲ.4.21
-            //
-            // デリゲートを作成する時の正当性検証可能な CIL コード
-            //
-            // dup
-            // ldvirtftn $virtualFunction
-            // newobj $ctor
-            //
-            // または
-            //
-            // ldftn $function
-            // newobj $ctor
-            ++Ldftn(methodRef(Static, Some resultType, topLevelType, l, [], argTypes))
-            ++Newobj(funcType, [Object; NativeInt])
-            ++Stloc x
-
+    | P.LetCls((x, t), { P.entry = Id.L l' as l; P.actual_fv = [] }, e2) ->
         locals := Map.add x (cliType t) !locals
-        acc+>g { env with vars = Map.add x (t, Local) vars } e2
+    
+        let argTypes, resultType = getCliFunctionElements t
+        let m = methodRef(Static, Some resultType, topLevelType, l', [], argTypes)
+        acc
+        +>getOrCreateStaticCachedDelegate env m l
+        ++Stloc x
+        +>g { env with vars = Map.add x (t, Local) vars } e2
+        
+    // 静的メソッドから Func<…> を作成
+    | P.Cls(t, { P.entry = Id.L l' as l; P.actual_fv = [] }) ->
+        let argTypes, resultType = getCliFunctionElements t
+        let m = methodRef(Static, Some resultType, topLevelType, l', [], argTypes)
+        acc
+        +>getOrCreateStaticCachedDelegate env m l
+        +>ret env
 
     // TODO: デリゲートをキャッシュして使いまわす
     // インスタンスメソッドから Func<…> を作成
-    | P.MakeCls((x, t), { P.entry = l; P.actual_fv = ys }, e2) ->
+    | P.LetCls((x, t), closure, e2) ->
+        locals := Map.add x (cliType t) !locals
+
+        g env (P.Cls(t, closure)) acc
+        ++Stloc x
+        +>g { env with vars = Map.add x (t, Local) vars } e2
+
+    | P.Cls(t, { P.entry = l; P.actual_fv = ys }) ->
         // [mincaml|let $x : $($ts -> $r) = let rec $l … = … $ys … in $e2|]
 
         // [cs|
@@ -297,14 +309,18 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
         // }
         //
         // var @temp_x = new $l();
-        // var $x = new Func<…>(@temp_x.Invoke);
         //
         // @temp_x.$(name ys.[0]) = $(expr ys.[0]);
         // @temp_x.$(name ys.[1]) = $(expr ys.[1]);
         // ︙
         //
-        // @temp_x.$x = $x;
+        // var @temp_f = new Func<…>(@temp_x.Invoke);
         //
+        // #if useSelf
+        // @temp_x.$x = @temp_f;
+        // #endif
+        //
+        // var $x = @temp_f
         // $e2
         // |]
 
@@ -324,38 +340,63 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
         //     }
         // }
         //
-        // newobj instance void $l::.ctor() // $l
-        // dup // $l; $l
-        // ldftn instance $r $l::Invoke($(ts.[0]), $(ts.[1]), …) // $l; $l; ((…) => $r)*
-        // newobj instance void class [mscorlib]System.Func`…<$(ts.[0]), $(ts.[1]), …, $r>::.ctor(object, native int) // $l; Func`…<…>
-        // stloc $x // $l
-        //
-        // dup // $l; $l
-        //     ldloc $x // $l; $l; Func`…<…>
-        //     stfld class [mscorlib]System.Func`…<$(ts.[0]), $(ts.[1]), …, $r> $l::$x // $l
+        // newobj instance void $l::.ctor()
+        // // $l
         //
         // dup
+        //     // $l; $l
         //     $(expr ys.[0])
+        //     // $l; $l; $(typeof ys.[0])
         //     stfld $(typeof ys.[0]) $l::$(name ys.[0])
+        // // $l
         // dup
         //     $(expr ys.[1])
         //     stfld $(typeof ys.[1]) $l::$(name ys.[1])
         // ︙
+        // // $l
         //
-        // pop
-        //
-        // $e2
+        // #if useSelf
+        //     dup
+        //     // $l; $l
+        //     dup
+        //     // $l; $l; $l
+        //     ldftn instance $r $l::Invoke($(ts.[0]), $(ts.[1]), …)
+        //     // $l; $l; $l; ((…) => $r)*
+        //     newobj instance void class System.Func`…<$(ts.[0]), $(ts.[1]), …, $r>::.ctor(object, native int)
+        //     // $l; $l; Func`…<…>
+        //     stfld class System.Func`…<$(ts.[0]), $(ts.[1]), …, $r> $l::$x
+        //     // $l
+        //     ldfld class System.Func`…<$(ts.[0]), $(ts.[1]), …, $r> $l::$x
+        //     // Func`…<…>
+        // #else
+        //     ldftn instance $r $l::Invoke($(ts.[0]), $(ts.[1]), …)
+        //     // $l; ((…) => $r)*
+        //     newobj instance void class System.Func`…<$(ts.[0]), $(ts.[1]), …, $r>::.ctor(object, native int)
+        //     // Func`…<…>
+        // #endif
         // |]
 
         let argTypes, resultType = getCliFunctionElements t
-        let funcType = funType argTypes resultType
+        let funcType = funType argTypes <| Some resultType
         let closuleType = localTypeToCliType l
 
         let acc =
             acc
             ++Newobj(closuleType, [])
+            +>many ys (fun (y, e) acc ->
+                acc
+                ++Dup
+                +>nonTail env e
+                ++Stfld(fieldRef(cliType <| P.typeof map vars e, closuleType, y))
+            )
+
+        let { P.useSelf = useSelf } = Map.find l env.globalEnv.fundefs
+        if useSelf then
+            let selfField = fieldRef(funcType, closuleType, l)
+            acc
             ++Dup
-            
+            ++Dup
+
             // ECMA-335 2012 Ⅲ.4.21
             //
             // デリゲートを作成する時の正当性検証可能な CIL コード
@@ -370,31 +411,14 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
             // newobj $ctor
             ++Ldftn(methodRef(Instance, Some resultType, closuleType, "Invoke", [], argTypes))
             ++Newobj(funcType, [Object; NativeInt])
-
-            ++Stloc x
-
-        let acc =
-            let { P.useSelf = useSelf } = Map.find l env.globalEnv.fundefs
-            if useSelf then
-                acc
-                ++Dup
-                ++Ldloc x
-                ++Stfld(fieldRef(funcType, closuleType, Id.L x))
-            else
-                acc
-
-        let acc =
+            ++Stfld selfField
+            ++Ldfld selfField
+            +>ret env
+        else
             acc
-            +>many ys (fun (y, e) acc ->
-                acc
-                ++Dup
-                +>nonTail env e
-                ++Stfld(fieldRef(cliType <| P.typeof map vars e, closuleType, y))
-            )
-            ++Pop
-
-        locals := Map.add x (cliType t) !locals
-        g { env with vars = Map.add x (t, Local) vars } e2 acc
+            ++Ldftn(methodRef(Instance, Some resultType, closuleType, "Invoke", [], argTypes))
+            ++Newobj(funcType, [Object; NativeInt])
+            +>ret env
 
     // $(ld x)
     // $(ld ys.[0])

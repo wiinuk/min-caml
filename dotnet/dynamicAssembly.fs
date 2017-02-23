@@ -10,6 +10,9 @@ type T = Reflection.TypeAttributes
 type M = Reflection.MethodAttributes
 type F = Reflection.FieldAttributes
 type B = Reflection.BindingFlags
+type C = Reflection.CallingConventions
+type P = Reflection.ParameterAttributes
+type I = Reflection.MethodImplAttributes
 type O = Emit.OpCodes
 
 type members = {
@@ -315,7 +318,7 @@ module DeclareMembers =
     let defineParameters defineParameter args =
         args
         |> Seq.iteri (fun i (name, _) ->
-            defineParameter(i + 1, ParameterAttributes.None, name)
+            defineParameter(i + 1, P.None, name)
             |> ignore
         )
 
@@ -350,9 +353,9 @@ module DeclareMembers =
         match name with
         | Ctor ->
             let parameterTypes = Seq.map (resolveType env) argTypes |> Seq.toArray
-            let c = parent.DefineConstructor(a, CallingConventions.Any, parameterTypes)
+            let c = parent.DefineConstructor(a, C.Standard, parameterTypes)
             if isForwardref then
-                c.SetImplementationFlags MethodImplAttributes.ForwardRef
+                c.SetImplementationFlags I.ForwardRef
 
             defineParameters c.DefineParameter args
             addCtor env parent argTypes c
@@ -379,7 +382,7 @@ module DeclareMembers =
             m.SetReturnType returnType
 
             if isForwardref then
-                m.SetImplementationFlags(MethodImplAttributes.ForwardRef)
+                m.SetImplementationFlags I.ForwardRef
 
             defineParameters m.DefineParameter args
             addMethod env parent (name, argTypes) m
@@ -427,7 +430,7 @@ module EmitMethods =
 
             t.SetCustomAttribute(ctor, [||])
 
-        // TODO:
+        // TODO: 引数付き属性への対応 ( dynamic DLL )
         | _ -> failwith "not implemented"
 
     let (+=) (g: ILGenerator) op = g.Emit op
@@ -650,17 +653,17 @@ let defineMinCamlAssembly s p =
         | None -> a.DefineDynamicModule moduleName
         | Some fileName -> a.DefineDynamicModule(moduleName, fileName)
 
-    let env = Dictionary()
+    let typeMembers = Dictionary()
 
     // 1. 型の宣言
-    for d in decls do DeclareTypes.decl env m d
+    for d in decls do DeclareTypes.decl typeMembers m d
 
     let env = {
         entryPoint = ref None
         modules = [m]
         thisType = None
         methodTypeArgs = []
-        typeMembers = env
+        typeMembers = typeMembers
     }
 
     // 2. ジェネリック制約と継承関係とメンバの宣言

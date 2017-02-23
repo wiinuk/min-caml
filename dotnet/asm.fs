@@ -56,8 +56,11 @@ let rec tupleType types =
 let unitType = TypeRef(Class, ["mscorlib"], ["System"], [], "DBNull", [])
 
 let funType argTypes resultType =
-    let name = sprintf "Func`%d" <| List.length argTypes + 1
-    let args = argTypes @ [resultType]
+    let name, args =
+        match resultType with
+        | None -> sprintf "Action`%d" (List.length argTypes), argTypes
+        | Some r -> sprintf "Func`%d" (List.length argTypes + 1), argTypes @ [r]
+    
     TypeRef(Class, ["mscorlib"], ["System"], [], name, args)
 
 let rec cliType = function
@@ -66,7 +69,7 @@ let rec cliType = function
     | Type.Bool -> Bool
     | Type.Int -> Int32
     | Type.Float -> Float64
-    | Type.Fun(argTypes, resultType) -> funType (List.map cliType argTypes) (cliType resultType)
+    | Type.Fun(argTypes, resultType) -> funType (List.map cliType argTypes) <| Some (cliType resultType)
     | Type.Tuple ts -> tupleType <| List.map cliType ts
     | Type.Var { contents = Some t } -> cliType t
     | Type.Var { contents = None } -> failwith "unexpected type 'Var'"

@@ -3,7 +3,10 @@ open ExtraOperators
 open Xunit
 open System
 open System.IO
+open System.Reflection
 open System.Reflection.Emit
+open System.Threading.Tasks
+open System.Text
 
 //                 - 出力ファイル -
 // --out:<file>                   出力ファイルの名前 (短い形式: -o)
@@ -73,8 +76,11 @@ open System.Reflection.Emit
 // --targetprofile:<string>       このアセンブリのターゲット フレームワーク プロファイルを指定してください。有効な値は mscorlib または netcore です。既定 - mscorlib
 // --quotations-debug[+|-]        デバッグ情報を引用符で囲んで生成します
 let fsharpc = "../../../../packages/FSharp.Compiler.Tools.4.0.1.21/tools/fsc.exe"
+
 // TODO: 参照先を nuget にする
 let ilasm = env"windir"/"Microsoft.NET/Framework/v4.0.30319/ilasm.exe"
+let ildasm = env"ProgramFiles"/"Microsoft SDKs/Windows/v10.0A/bin/NETFX 4.6.1 Tools/ildasm.exe"
+let peverify = env"ProgramFiles"/"Microsoft SDKs/Windows/v10.0A/bin/NETFX 4.6.1 Tools/peverify.exe"
 
 let (@.) = path.changeExtension
 
@@ -120,19 +126,24 @@ let rec iter n e =
 let parseClosure =
     let gate = obj()
     fun iterationCount b -> lock gate <| fun _ ->
-        Id.counter := 0
-        Typing.extenv := M.empty
-        Parser.exp Lexer.token b
-        |> Typing.f
-        |> KNormal.f
-        |> Alpha.f
-        |> iter iterationCount
-        |> Closure.f
+
+    Id.counter := 0
+    Typing.extenv := M.empty
+    Parser.exp Lexer.token b
+    |> Typing.f
+    |> KNormal.f
+    |> Alpha.f
+    |> iter iterationCount
+    |> Closure.f
+
+let closureToTree x =
+    x
+    |> Tree.f
+    |> StackAlloc.f
 
 let parse iterationCount b =
     parseClosure iterationCount b
-    |> Tree.f
-    |> StackAlloc.f
+    |> closureToTree
     |> Virtual.f'
 
 let compileFileToAssembly sourcePath iterationCount assemblySettings =
@@ -143,27 +154,42 @@ let compileFileToAssembly sourcePath iterationCount assemblySettings =
 
 let recordStdout f =
     let oldout = stdout
+    let s = StringBuilder()
     try
-        use w = new StringWriter()
+        use s = new StringWriter(s)
+        use w = new DistributionWriter([|oldout; s|], leaveOpen = true)
         Console.SetOut w
         f()
-        w.Flush()
-        w.GetStringBuilder().ToString()
+
     finally
         Console.SetOut oldout
 
+    string s
+
+let (|InnerException|) (e: exn) = e.InnerException
+
 let invokeML sourceML =
+    let sourceDML = sourceML@."dml.exe"
     let minCamlAssembly = compileFileToAssembly sourceML 1000 {
         DynamicAssembly.DynamicAssemblySettings AppDomain.CurrentDomain with
-            access = AssemblyBuilderAccess.RunAndCollect
+            access = AssemblyBuilderAccess.RunAndSave
+            moduleFileName = Some sourceDML
     }
 
     let topLevel = minCamlAssembly.GetType Virtual.topLevelTypeName
     let main = topLevel.GetMethod Virtual.entryPointMethodName
 
-    recordStdout (fun _ ->
-        main.Invoke(null, [||]) |> ignore
-    )
+    try
+        recordStdout <| fun _ ->
+            main.Invoke(null, [||]) |> ignore
+    with
+    | :? TargetInvocationException & InnerException(:? InvalidProgramException & e) ->
+        minCamlAssembly.Save sourceDML
+        let errorMessage = recordStdout <| fun _ ->
+            exe ildasm "%s -text" sourceDML
+            exe peverify "%s -verbose" sourceDML
+
+        raise <| exn(errorMessage, e)
 
 type C = class end
 type B = Reflection.BindingFlags

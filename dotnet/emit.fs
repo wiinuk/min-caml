@@ -221,8 +221,8 @@ let custom oc x =
 
     match x with
     | { ctor = ctor; args = []; namedArgs = [] } -> methodRef oc ctor
-
-    // TODO:
+    
+    // TODO: 引数付き属性への対応 ( ilasm )
     | _ -> failwith "not implemented"
 
 let accessNonNested = function

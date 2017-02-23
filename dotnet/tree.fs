@@ -35,7 +35,8 @@ and t =
     | Let of (Id.t * Type.t) * t * t
     | Seq of t * t
     | Var of Id.t
-    | MakeCls of (Id.t * Type.t) * closure * t
+    | Cls of functionType: Type.t * closure
+    | LetCls of (Id.t * Type.t) * closure * t
     | AppCls of t * t list
     | AppDir of (Id.l * (* function type *) Type.t) * t list
     | Tuple of t list
@@ -58,6 +59,7 @@ let private resultType e = function
     | _ -> failwithf "type inference error: %A" e
 
 type map<'k,'v,'m> = {
+    /// <exception cref="T:System.Collections.Generic.KeyNotFoundException" />
     find: 'k -> 'm -> 'v
     add: 'k -> 'v -> 'm -> 'm
 }
@@ -84,8 +86,9 @@ let rec typeof map env = function
         with :? System.Collections.Generic.KeyNotFoundException ->
             failwithf "key not found: %A, env: %A" x env
 
-    | Let((x, t), _, e) -> typeof map (map.add x t env) e
-    | MakeCls((x, t), _, e) -> typeof map (map.add x t env) e
+    | Let((x, t), _, e)
+    | LetCls((x, t), _, e) -> typeof map (map.add x t env) e
+    | Cls(t, _) -> t
 
     | AppCls(e, _) as e' -> resultType e' <| typeof map env e
     | AppDir((_, t), _) as e' -> resultType e' t
@@ -110,7 +113,8 @@ let rec freeVars = function
     | Tuple es -> Seq.map freeVars es |> Set.unionMany
 
     | Let((x, _), e1, scope) -> freeVars scope -. x + freeVars e1
-    | MakeCls((x, _), { actual_fv = vs }, e) -> Set.unionMany (Seq.map (snd >> freeVars) vs) + freeVars e -. x
+    | LetCls((x, _), { actual_fv = vs }, e) -> Set.unionMany (Seq.map (snd >> freeVars) vs) + freeVars e -. x
+    | Cls(_, { actual_fv = vs }) -> Set.unionMany (Seq.map (snd >> freeVars) vs)
     | LetTuple(xts, e, scope) -> freeVars scope - Set.ofSeq (Seq.map fst xts) + freeVars e
 
 let notContains k e = not (Set.contains k (P.fv e))
@@ -188,9 +192,13 @@ let rec expr env = function
 
     | P.LetTuple(xts, x, scope) -> LetTuple(xts, Var x, expr (addVars xts env) scope)
     | P.Let((x1, t1) as xt1, e1, e2) -> Let(xt1, expr env e1, expr (Map.add x1 t1 env) e2)
-    | P.MakeCls((x1, t1) as xt1, { Closure.entry = l; Closure.actual_fv = fvs }, e) ->
-        let fvs = List.map (fun v -> Id.L v, Var v) fvs
-        MakeCls(xt1, { entry = l; actual_fv = fvs }, expr (Map.add x1 t1 env) e)
+    | P.MakeCls((x1, t1) as xt1, { Closure.entry = l; Closure.actual_fv = fvs }, e2) ->
+        let closure = { entry = l; actual_fv = List.map (fun v -> Id.L v, Var v) fvs }
+        let scope = expr (Map.add x1 t1 env) e2
+        if List.contains x1 fvs
+        then LetCls(xt1, closure, scope)
+        else Let((x1, t1), Cls(t1, closure), scope)
+            
 
 let fundef env { P.name = Id.L x, _ as name; P.args = args; P.formal_fv = formal_fv; P.body = body } =
     let env = addVars args env |> addVars formal_fv
@@ -204,8 +212,6 @@ let fundef env { P.name = Id.L x, _ as name; P.args = args; P.formal_fv = formal
     }
 
 let f (P.Prog(fundefs, main)) =
-
-    // TODO: 関数 ( let rec ) は登録、値 ( let ) は登録しない
     let env = List.fold (fun env { P.name = Id.L x, t } -> Map.add x t env) Map.empty fundefs
 
     Prog(
