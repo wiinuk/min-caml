@@ -48,7 +48,6 @@ and t =
 type fundef = {
     name: Id.l * Type.t
     args: (Id.t * Type.t) list
-    useSelf: bool
     formalFreeVars: (Id.t * Type.t) list
     body: t
 }
@@ -200,13 +199,11 @@ let rec expr env = function
         else Let((x1, t1), Cls(t1, closure), scope)
             
 
-let fundef env { P.name = Id.L x, _ as name; P.args = args; P.formal_fv = formal_fv; P.body = body } =
+let fundef env { P.name = name; P.args = args; P.formal_fv = formal_fv; P.body = body } =
     let env = addVars args env |> addVars formal_fv
-    let useSelf = Set.contains x <| P.fv body
     {
         name = name
         args = args
-        useSelf = useSelf
         formalFreeVars = formal_fv
         body = expr env body
     }
