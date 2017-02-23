@@ -170,7 +170,7 @@ let rec resolveType env = function
     | String -> typeof<string>
     | Object -> typeof<obj>
 
-    // TODO: nativeint = System.IntPtr; native int ‚ðŽw’è‚µ‚½‚¢
+    // NOTE: nativeint = System.IntPtr; native int ‚ðŽw’è‚µ‚½‚¢
     | NativeInt -> typeof<nativeint>
     | Array t -> (resolveType env t).MakeArrayType()
 

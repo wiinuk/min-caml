@@ -283,16 +283,141 @@ let rec g ({ isTail = isTail; usedLocals = locals; vars = vars } as env) x acc =
         +>getOrCreateStaticCachedDelegate env m l
         +>ret env
 
-    // TODO: デリゲートをキャッシュして使いまわす
     // インスタンスメソッドから Func<…> を作成
     | P.LetCls((x, t), closure, e2) ->
         locals := Map.add x (cliType t) !locals
 
-        makeClosure env t closure acc
+        g env (P.Cls(t, closure)) acc
         ++Stloc x
         +>g { env with vars = Map.add x (t, Local) vars } e2
 
-    | P.Cls(t, closure) -> makeClosure env t closure acc
+    | P.Cls(t, { P.entry = l; P.actual_fv = ys }) ->
+        // [mincaml|let $x : $($ts -> $r) = let rec $l … = … $ys … in $e2|]
+
+        // [cs|
+        // class sealed $l
+        // {
+        //     public $(typeof ys.[0]) $(name ys[0]);
+        //     public $(typeof ys.[1]) $(name ys[1]);
+        //     ︙
+        //
+        //     public $r Invoke($(ts.[0]) …, $(ts.[1]) …, …)
+        //     {
+        //         $(closure.entry)
+        //     }
+        // }
+        //
+        // var @temp_x = new $l();
+        //
+        // @temp_x.$(name ys.[0]) = $(expr ys.[0]);
+        // @temp_x.$(name ys.[1]) = $(expr ys.[1]);
+        // ︙
+        //
+        // var @temp_f = new Func<…>(@temp_x.Invoke);
+        //
+        // #if useSelf
+        // @temp_x.$x = @temp_f;
+        // #endif
+        //
+        // var $x = @temp_f
+        // $e2
+        // |]
+
+        // [il|
+        // .class sealed beforefieldinit $l
+        // {
+        //     .custom instance void [mscorlib]System.Runtime.CompilerServices.CompilerGeneratedAttribute::.ctor()
+        //     .field public class [mscorlib]System.Func`…<$(ts.[0]), $(ts.[1]), …, $r> $x;
+        //
+        //     .field public $(typeof ys.[0]) $(name ys.[0])
+        //     .field public $(typeof ys.[1]) $(name ys.[1])
+        //     ︙
+        //
+        //     .method public hidebysig instance $r Invoke($(ts.[0]) …, $(ts.[1]) …, …) cil managed
+        //     {
+        //         $(closure.entry)
+        //     }
+        // }
+        //
+        // newobj instance void $l::.ctor()
+        // // $l
+        //
+        // dup
+        //     // $l; $l
+        //     $(expr ys.[0])
+        //     // $l; $l; $(typeof ys.[0])
+        //     stfld $(typeof ys.[0]) $l::$(name ys.[0])
+        // // $l
+        // dup
+        //     $(expr ys.[1])
+        //     stfld $(typeof ys.[1]) $l::$(name ys.[1])
+        // ︙
+        // // $l
+        //
+        // #if useSelf
+        //     dup
+        //     // $l; $l
+        //     dup
+        //     // $l; $l; $l
+        //     ldftn instance $r $l::Invoke($(ts.[0]), $(ts.[1]), …)
+        //     // $l; $l; $l; ((…) => $r)*
+        //     newobj instance void class System.Func`…<$(ts.[0]), $(ts.[1]), …, $r>::.ctor(object, native int)
+        //     // $l; $l; Func`…<…>
+        //     stfld class System.Func`…<$(ts.[0]), $(ts.[1]), …, $r> $l::$x
+        //     // $l
+        //     ldfld class System.Func`…<$(ts.[0]), $(ts.[1]), …, $r> $l::$x
+        //     // Func`…<…>
+        // #else
+        //     ldftn instance $r $l::Invoke($(ts.[0]), $(ts.[1]), …)
+        //     // $l; ((…) => $r)*
+        //     newobj instance void class System.Func`…<$(ts.[0]), $(ts.[1]), …, $r>::.ctor(object, native int)
+        //     // Func`…<…>
+        // #endif
+        // |]
+
+        let argTypes, resultType = getCliFunctionElements t
+        let funcType = funType argTypes <| Some resultType
+        let closuleType = localTypeToCliType l
+
+        let acc =
+            acc
+            ++Newobj(closuleType, [])
+            +>many ys (fun (y, e) acc ->
+                acc
+                ++Dup
+                +>nonTail env e
+                ++Stfld(fieldRef(cliType <| P.typeof map vars e, closuleType, y))
+            )
+
+        let { P.useSelf = useSelf } = Map.find l env.globalEnv.fundefs
+        if useSelf then
+            let selfField = fieldRef(funcType, closuleType, l)
+            acc
+            ++Dup
+            ++Dup
+
+            // ECMA-335 2012 Ⅲ.4.21
+            //
+            // デリゲートを作成する時の正当性検証可能な CIL コード
+            //
+            // dup
+            // ldvirtftn $virtualFunction
+            // newobj $ctor
+            //
+            // または
+            //
+            // ldftn $function
+            // newobj $ctor
+            ++Ldftn(methodRef(Instance, Some resultType, closuleType, "Invoke", [], argTypes))
+            ++Newobj(funcType, [Object; NativeInt])
+            ++Stfld selfField
+            ++Ldfld selfField
+            +>ret env
+        else
+            acc
+            ++Ldftn(methodRef(Instance, Some resultType, closuleType, "Invoke", [], argTypes))
+            ++Newobj(funcType, [Object; NativeInt])
+            +>ret env
 
     // $(ld x)
     // $(ld ys.[0])
@@ -453,135 +578,6 @@ and letTuple { usedLocals = locals } xts e2 acc =
     aux xts acc
     ++Pop
 
-and makeClosure ({ vars = vars } as env) t { P.entry = l; P.actual_fv = ys } acc =
-    // [mincaml|let $x : $($ts -> $r) = let rec $l … = … $ys … in $e2|]
-
-    // [cs|
-    // class sealed $l
-    // {
-    //     public $(typeof ys.[0]) $(name ys[0]);
-    //     public $(typeof ys.[1]) $(name ys[1]);
-    //     ︙
-    //
-    //     public $r Invoke($(ts.[0]) …, $(ts.[1]) …, …)
-    //     {
-    //         $(closure.entry)
-    //     }
-    // }
-    //
-    //
-     
-    // var @temp = $methodName
-    // if (@temp == null) ? (
-    //     var @temp_x = new $l(),
-    //     var @temp_f = new Func<…>(@temp_x.Invoke),
-    //
-    //     $methodName = new System.Func<…>(…)
-    //     @temp = @temp_x
-    // }
-    // @temp
-
-    // var @temp_x = new $l();
-    //
-    // @temp_x.$(name ys.[0]) = $(expr ys.[0]);
-    // @temp_x.$(name ys.[1]) = $(expr ys.[1]);
-    // ︙
-    //
-    // #if useSelf
-    // @temp_x.$x = @temp_f;
-    // #endif
-    //
-    // var $x = @temp_f
-    // $e2
-    // |]
-
-    // [il|
-    // .class sealed beforefieldinit $l
-    // {
-    //     .custom instance void [mscorlib]System.Runtime.CompilerServices.CompilerGeneratedAttribute::.ctor()
-    //     .field public class [mscorlib]System.Func`…<$(ts.[0]), $(ts.[1]), …, $r> $x;
-    //
-    //     .field public $(typeof ys.[0]) $(name ys.[0])
-    //     .field public $(typeof ys.[1]) $(name ys.[1])
-    //     ︙
-    //
-    //     .method public hidebysig instance $r Invoke($(ts.[0]) …, $(ts.[1]) …, …) cil managed
-    //     {
-    //         $(closure.entry)
-    //     }
-    // }
-    //
-    // newobj instance void $l::.ctor()
-    // // $l
-    //
-    // dup
-    //     // $l; $l
-    //     $(expr ys.[0])
-    //     // $l; $l; $(typeof ys.[0])
-    //     stfld $(typeof ys.[0]) $l::$(name ys.[0])
-    // // $l
-    // dup
-    //     $(expr ys.[1])
-    //     stfld $(typeof ys.[1]) $l::$(name ys.[1])
-    // ︙
-    // // $l
-    //
-    // #if useSelf
-    //     dup
-    //     // $l; $l
-    //     dup
-    //     // $l; $l; $l
-    //     ldftn instance $r $l::Invoke($(ts.[0]), $(ts.[1]), …)
-    //     // $l; $l; $l; ((…) => $r)*
-    //     newobj instance void class System.Func`…<$(ts.[0]), $(ts.[1]), …, $r>::.ctor(object, native int)
-    //     // $l; $l; Func`…<…>
-    //     stfld class System.Func`…<$(ts.[0]), $(ts.[1]), …, $r> $l::$x
-    //     // $l
-    //     ldfld class System.Func`…<$(ts.[0]), $(ts.[1]), …, $r> $l::$x
-    //     // Func`…<…>
-    // #else
-    //     ldftn instance $r $l::Invoke($(ts.[0]), $(ts.[1]), …)
-    //     // $l; ((…) => $r)*
-    //     newobj instance void class System.Func`…<$(ts.[0]), $(ts.[1]), …, $r>::.ctor(object, native int)
-    //     // Func`…<…>
-    // #endif
-    // |]
-
-    let argTypes, resultType = getCliFunctionElements t
-    let funcType = funType argTypes <| Some resultType
-    let closuleType = localTypeToCliType l
-
-    let selfField = fieldRef(funcType, closuleType, l)
-
-    acc
-    ++Newobj(closuleType, [])
-    +>many ys (fun (y, e) acc ->
-        acc
-        ++Dup
-        +>nonTail env e
-        ++Stfld(fieldRef(cliType <| P.typeof map vars e, closuleType, y))
-    )
-    ++Dup
-    ++Dup
-
-    // ECMA-335 2012 Ⅲ.4.21
-    //
-    // デリゲートを作成する時の正当性検証可能な CIL コード
-    //
-    // dup
-    // ldvirtftn $virtualFunction
-    // newobj $ctor
-    //
-    // または
-    //
-    // ldftn $function
-    // newobj $ctor
-    ++Ldftn(methodRef(Instance, Some resultType, closuleType, "Invoke", [], argTypes))
-    ++Newobj(funcType, [Object; NativeInt])
-    ++Stfld selfField
-    ++Ldfld selfField
-    +>ret env
-
 let methodDef genv access callconv resultType name args formalFvs env e =
     let env = List.fold (fun env (y, t) -> Map.add y (t, Arg) env) env args
     let env = List.fold (fun env (z, t) -> Map.add z (t, InstanceField) env) env formalFvs
@@ -638,15 +634,20 @@ let compilerGenerated = {
 //      ret
 //    }
 // }
-let closureClass fundefs { P.name = Id.L x' as x, t; P.args = yts; P.formalFreeVars = zts; P.body = e } =
-    let inline (++) xs x = x::xs
+let closureClass fundefs { P.name = Id.L x' as x, t; P.args = yts; P.useSelf = useSelf; P.formalFreeVars = zts; P.body = e } =
+    let (++) xs x = x::xs
 
     let funcType = cliType t
     let resultType = getFunctionElements t |> snd
+    let acc =
+        []
+        ++Custom compilerGenerated
 
-    []
-    ++Custom compilerGenerated
-    ++field(Public, Instance, funcType, x)
+    let acc =
+        if useSelf then acc++field(Public, Instance, funcType, x)
+        else acc
+
+    acc
     +>many zts (fun (z, y) acc -> acc++field(Public, Instance, cliType y, Id.L z))
     ++Method defaultCtor
     ++Method(methodDef fundefs Public Instance resultType (Id.L "Invoke") yts ((x', t)::zts) Map.empty e)
