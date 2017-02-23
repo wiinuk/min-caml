@@ -6,28 +6,26 @@
 
 .class public abstract sealed beforefieldinit MinCamlGlobal
 {
-    .method public static class [mscorlib]System.DBNull min_caml_print_newline(
+    .method public static void min_caml_print_newline(
         class [mscorlib]System.DBNull _arg1
     )
     cil managed
     {
         call void [mscorlib]System.Console::WriteLine()
-        ldnull
         ret
     }
 
-    .method public static class [mscorlib]System.DBNull min_caml_print_int(
+    .method public static void min_caml_print_int(
         int32 x
     )
     cil managed
     {
         ldarg.0
         call void [mscorlib]System.Console::Write(int32)
-        ldnull
         ret
     }
 
-    .method public static class [mscorlib]System.DBNull min_caml_print_byte(
+    .method public static void min_caml_print_byte(
         int32 x
     )
     cil managed 
@@ -36,11 +34,10 @@
         conv.ovf.u1
         conv.u2
         call void [mscorlib]System.Console::Write(char)
-        ldnull
         ret
     }
 
-    .method public static class [mscorlib]System.DBNull min_caml_prerr_int(
+    .method public static void min_caml_prerr_int(
         int32 x
     )
     cil managed
@@ -48,11 +45,10 @@
         call class [mscorlib]System.IO.TextWriter [mscorlib]System.Console::get_Error()
         ldarg.0
         callvirt instance void [mscorlib]System.IO.TextWriter::Write(int32)
-        ldnull
         ret
     }
 
-    .method public static class [mscorlib]System.DBNull min_caml_prerr_byte(
+    .method public static void min_caml_prerr_byte(
         int32 x
     )
     cil managed
@@ -62,11 +58,10 @@
         conv.ovf.u1
         conv.u2
         callvirt instance void [mscorlib]System.IO.TextWriter::Write(char)
-        ldnull
         ret
     }
 
-    .method public static class [mscorlib]System.DBNull min_caml_prerr_float (
+    .method public static void min_caml_prerr_float (
         float64 x
     )
     cil managed
@@ -74,7 +69,6 @@
         call class [mscorlib]System.IO.TextWriter [mscorlib]System.Console::get_Error()
         ldarg.0
         callvirt instance void [mscorlib]System.IO.TextWriter::Write(float64)
-        ldnull
         ret
     }
 

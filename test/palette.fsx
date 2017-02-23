@@ -128,40 +128,14 @@ exe ildasm "-help"
 //例:    ildasm /tok /byt myfile.exe /out=myfile.il
 let ilasm = env"windir"/"Microsoft.NET/Framework/v4.0.30319/ilasm.exe"
 
-Test.testOnce "ack" |> Async.RunSynchronously
-
-childItem.get "*.ml.exe"
-    % exe peverify "%A /verbose"
-
-let target = "adder.mld.exe"
-
-"
-let rec apply f x = f x in
-let rec incr x = x + 1 in
-print_int(apply incr 10)
-"
-|> Lexing.from_string
-|> Test.parse 1000
-|> DynamicAssembly.defineMinCamlAssembly {
-    DynamicAssembly.DynamicAssemblySettings AppDomain.CurrentDomain with
-        access = AssemblyBuilderAccess.Save
-        moduleFileName = Some target
-}
-//|> fun minCamlAssembly ->
-//    let topLevel = minCamlAssembly.GetType Virtual.topLevelTypeName
-//    let main = topLevel.GetMethod Virtual.entryPointMethodName
-//    main.Invoke(null, [||]) |> ignore
-
-|> fun a -> a.Save target
+let target = "cls-bug2.ml.exe"
+Test.testOnce "cls-bug2" |> Async.RunSynchronously
 
 exe ildasm "%s -text" target
 exe peverify "%s -verbose" target
 
-
-exe ilasm "libmincaml.il matmul.il -out=matmul.ml.exe"
-
-exe "matmul.ml.exe" ""
-exe "matmul.fs.exe" ""
-
+childItem.get "*.ml.exe"
+    % exe peverify "%A /verbose"
+    
 (*
 *)

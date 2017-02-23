@@ -69,11 +69,19 @@ let rec cliType = function
     | Type.Bool -> Bool
     | Type.Int -> Int32
     | Type.Float -> Float64
-    | Type.Fun(argTypes, resultType) -> funType (List.map cliType argTypes) <| Some (cliType resultType)
+
+    // TODO: Unit ˆø”‚ª 1 ‚Â‚ÌŠÖ”‚Íˆø”‚È‚µ
+    // Unit –ß‚è’l‚ÌŠÖ”‚Í–ß‚è’l void
+    // | Type.Fun([Type.Unit], resultType) -> funType [] <| cliTypeOrVoid resultType
+    | Type.Fun(argTypes, resultType) -> funType (List.map cliType argTypes) <| cliTypeOrVoid resultType
+
     | Type.Tuple ts -> tupleType <| List.map cliType ts
     | Type.Var { contents = Some t } -> cliType t
     | Type.Var { contents = None } -> failwith "unexpected type 'Var'"
 
+and cliTypeOrVoid = function
+    | Type.Unit -> None
+    | t -> Some <| cliType t
 
 type call_conv = Instance | Static
 type method_name =

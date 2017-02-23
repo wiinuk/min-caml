@@ -84,6 +84,20 @@ let peverify = env"ProgramFiles"/"Microsoft SDKs/Windows/v10.0A/bin/NETFX 4.6.1 
 
 let (@.) = path.changeExtension
 
+let recordStdout f =
+    let oldout = stdout
+    let s = StringBuilder()
+    try
+        use s = new StringWriter(s)
+        use w = new DistributionWriter([|oldout; s|], leaveOpen = true)
+        Console.SetOut w
+        f()
+
+    finally
+        Console.SetOut oldout
+
+    string s
+
 let testOnce sourceML = async {
     let sourceIL = sourceML@."il"
     let binaryML = sourceML@."ml.exe"
@@ -151,20 +165,6 @@ let compileFileToAssembly sourcePath iterationCount assemblySettings =
     |> Lexing.from_channel
     |> parse iterationCount
     |> DynamicAssembly.defineMinCamlAssembly assemblySettings
-
-let recordStdout f =
-    let oldout = stdout
-    let s = StringBuilder()
-    try
-        use s = new StringWriter(s)
-        use w = new DistributionWriter([|oldout; s|], leaveOpen = true)
-        Console.SetOut w
-        f()
-
-    finally
-        Console.SetOut oldout
-
-    string s
 
 let (|InnerException|) (e: exn) = e.InnerException
 

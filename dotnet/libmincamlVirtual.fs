@@ -46,12 +46,19 @@ let getConsoleError = getProp(Static, textWriterType, consoleType, "Error")
 
 let libMethodDefCore (resultType, name, typeArgs, args) (maxStack, locals) opcodes =
     methodDef
-        (Public, Static, Some resultType, Id.L name, typeArgs, args)
+        (Public, Static, resultType, Id.L name, typeArgs, args)
         (maxStack, locals)
         (opcodes @ [Ret])
 
 let libMethodDef (resultType, name, args) opcodes =
-    libMethodDefCore (resultType, name, [], args) (None, []) opcodes
+    libMethodDefCore (Some resultType, name, [], args) (None, []) opcodes
+
+let libUnitMethodDef (name, args) opcodes =
+    libMethodDefCore
+        (None, name, [], args)
+        (None, [])
+        opcodes
+        // @ [Ldnull]
 
 let libConvMethodDef outputType libName inputType convop =
     libMethodDef(outputType, libName, ["x", inputType]) [Ldarg0; convop]
@@ -69,45 +76,39 @@ let libMathMethodDef libName mathName =
 let (!!) x = MethodTypeArgument x
 
 let decls = [
-    libMethodDef(unitType, "min_caml_print_newline", ["_arg1", unitType]) [
+    libUnitMethodDef("min_caml_print_newline", ["_arg1", unitType]) [
         call(Static, None, consoleType, "WriteLine", [], [])
-        Ldnull
     ]
-    libMethodDef(unitType, "min_caml_print_int", ["x", Int32]) [
+    libUnitMethodDef("min_caml_print_int", ["x", Int32]) [
         Ldarg0
         call(Static, None, consoleType, "Write", [], [Int32])
-        Ldnull
     ]
-    libMethodDef(unitType, "min_caml_print_byte", ["x", Int32]) [
+    libUnitMethodDef("min_caml_print_byte", ["x", Int32]) [
         Ldarg0
         ConvOvfU1
         ConvU2
         call(Static, None, consoleType, "Write", [], [Char])
-        Ldnull
     ]
-    libMethodDef(unitType, "min_caml_prerr_int", ["x", Int32]) [
+    libUnitMethodDef("min_caml_prerr_int", ["x", Int32]) [
         getConsoleError
         Ldarg0
         callvirt(None, textWriterType, "Write", [Int32])
-        Ldnull
     ]
-    libMethodDef(unitType, "min_caml_prerr_byte", ["x", Int32]) [
+    libUnitMethodDef("min_caml_prerr_byte", ["x", Int32]) [
         getConsoleError
         Ldarg0
         ConvOvfU1
         ConvU2
         callvirt(None, textWriterType, "Write", [Char])
-        Ldnull
     ]
-    libMethodDef(unitType, "min_caml_prerr_float", ["x", Float64]) [
+    libUnitMethodDef("min_caml_prerr_float", ["x", Float64]) [
         getConsoleError
         Ldarg0
         callvirt(None, textWriterType, "Write", [Float64])
-        Ldnull
     ]
     libReadParseMethodDef Int32 "min_caml_read_int"
     libReadParseMethodDef Float64 "min_caml_read_float"
-    libMethodDefCore(Array !!"T", "min_caml_create_array", ["T"], ["n", Int32; "x", !!"T"])
+    libMethodDefCore(Some(Array !!"T"), "min_caml_create_array", ["T"], ["n", Int32; "x", !!"T"])
         (Some 5, [
             "xs", Array !!"T"
             "1", Int32
