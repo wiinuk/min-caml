@@ -1,46 +1,10 @@
 module LibmincamlVirtual
 
+open AsmType
 open Asm
 
-let map =
-    dict [
-        typeof<bool>, Bool
-        typeof<char>, Char
-        typeof<double>, Float64
-        typeof<double>, Float64
-        typeof<int>, Int32
-        typeof<nativeint>, NativeInt
-        typeof<obj>, Object
-        typeof<string>, String
-    ]
-
-let rec cliTypeOf t =
-    let mutable r = Unchecked.defaultof<_>
-
-    if t = typeof<System.Void> then failwith "void is not first class type"
-    if map.TryGetValue(t, &r) then r
-    elif t.IsArray && t.GetArrayRank() = 1 then t.GetElementType() |> cliTypeOf |> Array
-    elif t.IsGenericParameter && not (isNull t.DeclaringMethod) then MethodTypeArgument t.Name
-    else
-
-    let rec aux (t: System.Type) =
-        if t.IsNested then
-            t.Name::aux t.DeclaringType
-        else
-            [t.Name]
-
-    let kind = if t.IsValueType then type_kind.ValueType else type_kind.Class
-    let moduleName = t.Assembly.GetName().Name.Split '.' |> Array.toList
-    let nameSpace = t.Namespace.Split '.' |> Array.toList
-    let nestedParents = if t.IsNested then aux t.DeclaringType |> List.rev else []
-    let typeArgs = if t.IsGenericType then t.GetGenericArguments() |> Seq.map cliTypeOf |> Seq.toList else []
-    TypeRef(kind, moduleName, nameSpace, nestedParents, t.Name, typeArgs)
-
-[<RequiresExplicitTypeArguments>]
-let clitypeof<'a> = cliTypeOf typeof<'a>
-
-let consoleType = clitypeof<System.Console>
-let textWriterType =  clitypeof<System.IO.TextWriter>
+let consoleType = asmtypeof<System.Console>
+let textWriterType =  asmtypeof<System.IO.TextWriter>
 let getConsoleError = getProp(Static, textWriterType, consoleType, "Error")
 
 
@@ -64,19 +28,19 @@ let libConvMethodDef outputType libName inputType convop =
     libMethodDef(outputType, libName, ["x", inputType]) [Ldarg0; convop]
 
 let libReadParseMethodDef outputType libName =
-    libMethodDef(outputType, libName, ["_arg1", unitType]) [
+    libMethodDef(outputType, libName, []) [
         call(Static, Some String, consoleType, "ReadLine", [], [])
         call(Static, Some outputType, outputType, "Parse", [], [String])
     ]
 
 let libMathMethodDef libName mathName =
-    call(Static, Some Float64, clitypeof<System.Math>, mathName, [], [Float64])
+    call(Static, Some Float64, asmtypeof<System.Math>, mathName, [], [Float64])
     |> libConvMethodDef Float64 libName Float64
 
 let (!!) x = MethodTypeArgument x
 
 let decls = [
-    libUnitMethodDef("min_caml_print_newline", ["_arg1", unitType]) [
+    libUnitMethodDef("min_caml_print_newline", []) [
         call(Static, None, consoleType, "WriteLine", [], [])
     ]
     libUnitMethodDef("min_caml_print_int", ["x", Int32]) [

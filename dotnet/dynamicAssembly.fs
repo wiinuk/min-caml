@@ -1,4 +1,5 @@
 module DynamicAssembly
+open AsmType
 open Asm
 open System
 open System.Reflection
@@ -17,14 +18,14 @@ type O = Emit.OpCodes
 
 type members = {
     /// generic method definitions
-    methods: Dictionary<string * cli_type list, MethodBuilder>
-    ctors: Dictionary<cli_type list, ConstructorBuilder>
+    methods: Dictionary<string * asm_type list, MethodBuilder>
+    ctors: Dictionary<asm_type list, ConstructorBuilder>
     fields: Dictionary<string, FieldBuilder>
     /// generic type definitions
     nestedTypes: Dictionary<string, TypeBuilder>
 }
 
-type cli_method_base =
+type method_base =
     | ConstructorInfo of ConstructorInfo
     | MethodInfo of MethodInfo
 
@@ -93,7 +94,7 @@ let rec normalizeTypeArgumentsCore methodTypeParams = function
         | :? KeyNotFoundException ->
             failwithf "generic type argments: %A is not found in %A" n methodTypeParams
 
-    | Array t -> normalizeTypeArgumentsCore methodTypeParams t |> cli_type.Array
+    | Array t -> normalizeTypeArgumentsCore methodTypeParams t |> asm_type.Array
     | TypeRef(kind, moduleName, nameSpace, nestedParents, typeName, typeArgs) ->
         let typeArgs = List.map (normalizeTypeArgumentsCore methodTypeParams) typeArgs
         TypeRef(kind, moduleName, nameSpace, nestedParents, typeName, typeArgs)

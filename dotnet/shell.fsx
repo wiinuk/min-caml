@@ -73,6 +73,16 @@ module item =
     let move source sink = File.Move(source, sink)
     let remove source = Item.Remove source
 
+module content =
+    let add path format =
+        Printf.kprintf (fun s ->
+            let s = if s.EndsWith "\n" then s else s + "\r\n"
+            File.AppendAllText(path, s)
+        ) format
+
+module date =
+    let get<'a> = DateTime.Now
+
 /// object
 module obj =
     let foreach f xs = Seq.iter (f >> ignore) xs

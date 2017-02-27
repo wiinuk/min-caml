@@ -3,85 +3,7 @@
 [<global.System.Diagnostics.CodeAnalysis.SuppressMessageAttribute(
     "NameConventions", "IdentifiersMustNotContainUnderscores")>]
 module Asm
-
-type dotted_name = Id.t list
-type type_kind = Class | ValueType
-type cli_type =
-
-    /// .this
-    | This
-    /// e.g. !0
-    | TypeArgmentIndex of int
-    /// e.g. !!0
-    | MethodArgmentIndex of int
-    /// e.g. !!T
-    | MethodTypeArgument of Id.t
-
-    /// sizeof<bool> = 1
-    | Bool
-    | Char
-    | Int32
-    | Float64
-    | String
-    | Object
-    /// native int
-    | NativeInt
-    | Array of cli_type
-
-    /// e.g. class [moduleA.dll]NamespaceA.ClassA/ClassB/Class
-    | TypeRef of
-        kind: type_kind *
-        moduleName: dotted_name *
-        nameSpace: Id.t list *
-        nestedParents: Id.t list *
-        typeName: Id.t *
-        typeArgs: cli_type list
-
-let tryTake n xs =
-    let rec aux n acc = function
-        | xs when n <= 0 -> Some(List.rev acc, xs)
-        | [] -> None
-        | x::xs -> aux (n - 1) (x::acc) xs
-    aux n [] xs
-
-let rec tupleType types =
-    let types =
-        match tryTake 7 types with
-        | None | Some(_, []) -> types
-        | Some(types, tail) -> types @ [tupleType tail]
-
-    let arity = List.length types
-    TypeRef(Class, ["mscorlib"], ["System"], [], "Tuple`" + string arity, types)
-
-let unitType = TypeRef(Class, ["mscorlib"], ["System"], [], "DBNull", [])
-
-let funType argTypes resultType =
-    let name, args =
-        match resultType with
-        | None -> sprintf "Action`%d" (List.length argTypes), argTypes
-        | Some r -> sprintf "Func`%d" (List.length argTypes + 1), argTypes @ [r]
-    
-    TypeRef(Class, ["mscorlib"], ["System"], [], name, args)
-
-let rec cliType = function
-    | Type.Array t -> Array <| cliType t
-    | Type.Unit -> unitType
-    | Type.Bool -> Bool
-    | Type.Int -> Int32
-    | Type.Float -> Float64
-
-    // TODO: Unit ˆø”‚ª 1 ‚Â‚ÌŠÖ”‚Íˆø”‚È‚µ
-    // Unit –ß‚è’l‚ÌŠÖ”‚Í–ß‚è’l void
-    // | Type.Fun([Type.Unit], resultType) -> funType [] <| cliTypeOrVoid resultType
-    | Type.Fun(argTypes, resultType) -> funType (List.map cliType argTypes) <| cliTypeOrVoid resultType
-
-    | Type.Tuple ts -> tupleType <| List.map cliType ts
-    | Type.Var { contents = Some t } -> cliType t
-    | Type.Var { contents = None } -> failwith "unexpected type 'Var'"
-
-and cliTypeOrVoid = function
-    | Type.Unit -> None
-    | t -> Some <| cliType t
+open AsmType
 
 type call_conv = Instance | Static
 type method_name =
@@ -90,16 +12,16 @@ type method_name =
 
 type method_ref = {
     callconv: call_conv
-    resultType: cli_type option
-    declaringType: cli_type
-    typeArgs: cli_type list
+    resultType: asm_type option
+    declaringType: asm_type
+    typeArgs: asm_type list
     methodName: method_name
-    argTypes: cli_type list
+    argTypes: asm_type list
 }
 
 type field_ref = {
-    fieldType: cli_type
-    declaringType: cli_type
+    fieldType: asm_type
+    declaringType: asm_type
     name: Id.l
 }
 
@@ -139,12 +61,12 @@ and exp =
     | Call of isTail: bool * method_ref
     | Ret
 
-    | Newarr of cli_type
-    | Ldelem of cli_type
-    | Stelem of cli_type
+    | Newarr of asm_type
+    | Ldelem of asm_type
+    | Stelem of asm_type
 
     /// newobj instance void $declaringType::.ctor($argTypes)
-    | Newobj of declaringType: cli_type * argTypes: cli_type list
+    | Newobj of declaringType: asm_type * argTypes: asm_type list
     | Ldfld of field_ref
     | Stfld of field_ref
     | Ldsfld of field_ref
@@ -165,7 +87,7 @@ type method_body = {
     isEntrypoint: bool
 
     /// .locals init (...)
-    locals: (Id.t * cli_type) list
+    locals: (Id.t * asm_type) list
     opcodes: t
 }
 
@@ -175,10 +97,10 @@ type method_def = {
     isRtspecialname: bool
     callconv: call_conv
     /// None = void
-    resultType: cli_type option
+    resultType: asm_type option
     name: method_name
     typeArgs: Id.t list
-    args: (Id.t * cli_type) list
+    args: (Id.t * asm_type) list
     isForwardref: bool
     body: method_body
 }
@@ -191,7 +113,7 @@ type custom = {
 type field_def = {
     access: accesibility
     callconv: call_conv
-    fieldType: cli_type
+    fieldType: asm_type
     name: Id.l
 }
 type class_decl =

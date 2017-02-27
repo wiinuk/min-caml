@@ -1,4 +1,5 @@
 module Emit
+open AsmType
 open Asm
 open System
 

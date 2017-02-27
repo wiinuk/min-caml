@@ -5,12 +5,14 @@
     "NameConventions", "IdentifiersMustNotContainUnderscores")>]
 module Virtual
 
+open AsmType
 open Asm
 module P = Tree
 
 type location =
     | Local
     | Arg
+    | VirtualUnit
     | InstanceField
     | This
     | StaticMethodSelf
@@ -26,7 +28,7 @@ type env = {
     isTail: bool
     isUnitValue: bool
     methodName: Id.l
-    usedLocals: Map<Id.t, cli_type> ref
+    usedLocals: Map<Id.t, asm_type> ref
 }
 let addMany xts l ({ vars = vars } as env) =
     { env with vars = List.fold (fun map (x, t) -> Map.add x (t, l) map) vars xts }
@@ -35,7 +37,7 @@ let startupMethodName = "MinCamlStartup"
 let entryPointMethodName = "Main"
 let topLevelTypeName = "MinCamlGlobal"
 let topLevelType = TypeRef(type_kind.Class, [], [], [], topLevelTypeName, [])
-let localTypeToCliType (Id.L n) = TypeRef(type_kind.Class, [], [], [topLevelTypeName], n, [])
+let localTypeToAsmType (Id.L n) = TypeRef(type_kind.Class, [], [], [topLevelTypeName], n, [])
 
 type stack = {
     stack: exp list
@@ -100,7 +102,7 @@ let (++) { stack = stack; maxSize = maxSize; size = size } x =
         size = size
     }
 
-let (+>) x f = f x
+let inline private (+>) x f = f x
 
 let private getArrayElement = function
     | Type.Array t -> t
@@ -109,10 +111,6 @@ let private getArrayElement = function
 let private getFunctionElements = function
     | Type.Fun(ts, r) -> ts, r
     | _ -> assert_false()
-
-let private getCliFunctionElements t =
-    let ts, t = getFunctionElements t
-    List.map cliType ts, cliTypeOrVoid t
 
 // デリゲートをキャッシュして使いまわす
 // NOTE: デリゲートをキャッシュする操作はスレッドセーフでないが、二重にインスタンスが生成されるぐらいで特に問題ないはず
@@ -135,9 +133,9 @@ let private getCliFunctionElements t =
 let getOrCreateStaticCachedDelegate env m (Id.L name' as globalFieldName) acc =
     let { globalEnv = { globalCaches = caches } } = env
     let { argTypes = argTypes; resultType = resultType } = m
-    let funcType = funType argTypes resultType
+    let funcType = func(argTypes, resultType)
 
-    let fieldRef, fieldDef = fieldSpec(Private, Static, funcType, cli_type.This, globalFieldName)
+    let fieldRef, fieldDef = fieldSpec(Private, Static, funcType, asm_type.This, globalFieldName)
 
     caches := Map.add name' fieldDef !caches
 
@@ -166,25 +164,6 @@ let getOrCreateStaticCachedDelegate env m (Id.L name' as globalFieldName) acc =
     ++Dup
     ++Stsfld fieldRef
     ++Label created
-
-let ld ({ vars = vars } as env) id acc =
-    let t, location = Map.find id vars
-    match location with
-    | Local -> acc++Ldloc id
-    | Arg -> acc++Ldarg id
-    | This -> acc++Ldarg0
-    | InstanceField ->
-        acc
-        ++Ldarg0
-        ++Ldfld(fieldRef(cliType t, cli_type.This, Id.L id))
-
-    | StaticMethodSelf ->
-        let { env.methodName = name } = env
-        let argTypes, resultType = getCliFunctionElements t
-        let m = methodRef(Static, resultType, topLevelType, id, [], argTypes)
-        acc
-        +>getOrCreateStaticCachedDelegate env m name
-        ++Nop
 
 let many xs f acc = List.fold (fun acc x -> f x acc) acc xs
 
@@ -257,12 +236,33 @@ let rec g ({ usedLocals = locals } as env) x acc =
             let endIf = Id.L <| Id.genid "endif"
             acc++Br endIf++Label ifTrue+>g env e2++Label endIf
 
-    | P.Var x -> acc+>ld env x+>ret env
+    | P.Var x ->
+        let acc =
+            let t, location = Map.find x env.vars
+            match location with
+            | Local -> acc++Ldloc x
+            | Arg -> acc++Ldarg x
+            | VirtualUnit -> acc
+            | This -> acc++Ldarg0
+            | InstanceField ->
+                acc
+                ++Ldarg0
+                ++Ldfld(fieldRef(asmType t, asm_type.This, Id.L x))
+
+            | StaticMethodSelf ->
+                let { env.methodName = name } = env
+                let argTypes, resultType = funcElements <| getFunctionElements t
+                let m = methodRef(Static, resultType, topLevelType, x, [], argTypes)
+                acc
+                +>getOrCreateStaticCachedDelegate env m name
+                ++Nop
+
+        acc+>ret env
 
     | P.Seq(e1, e2) ->
         let isVoid =
             P.typeof map env.vars e1
-            |> cliTypeOrVoid
+            |> asmTypeOrVoid
             |> Option.isNone
 
         let acc = nonTail env e1 acc
@@ -273,7 +273,7 @@ let rec g ({ usedLocals = locals } as env) x acc =
     // stloc $x
     // $e2
     | P.Let((x, t1), e1, e2) ->
-        locals := Map.add x (cliType t1) !locals
+        locals := Map.add x (asmType t1) !locals
 
         nonTail env e1 acc
         ++Stloc x
@@ -283,9 +283,9 @@ let rec g ({ usedLocals = locals } as env) x acc =
 
     // 静的メソッドから Func<…> を作成
     | P.LetCls((x, t), { P.entry = Id.L l' as l; P.actual_fv = [] }, e2) ->
-        locals := Map.add x (cliType t) !locals
+        locals := Map.add x (asmType t) !locals
     
-        let argTypes, resultType = getCliFunctionElements t
+        let argTypes, resultType = funcElements <| getFunctionElements t
         let m = methodRef(Static, resultType, topLevelType, l', [], argTypes)
         acc
         +>getOrCreateStaticCachedDelegate env m l
@@ -294,7 +294,7 @@ let rec g ({ usedLocals = locals } as env) x acc =
         
     // 静的メソッドから Func<…> を作成
     | P.Cls(t, { P.entry = Id.L l' as l; P.actual_fv = [] }) ->
-        let argTypes, resultType = getCliFunctionElements t
+        let argTypes, resultType = funcElements <| getFunctionElements t
         let m = methodRef(Static, resultType, topLevelType, l', [], argTypes)
         acc
         +>getOrCreateStaticCachedDelegate env m l
@@ -302,7 +302,7 @@ let rec g ({ usedLocals = locals } as env) x acc =
 
     // インスタンスメソッドから Func<…> を作成
     | P.LetCls((x, t), closure, e2) ->
-        locals := Map.add x (cliType t) !locals
+        locals := Map.add x (asmType t) !locals
 
         g env (P.Cls(t, closure)) acc
         ++Stloc x
@@ -392,9 +392,9 @@ let rec g ({ usedLocals = locals } as env) x acc =
         // #endif
         // |]
 
-        let argTypes, resultType = getCliFunctionElements t
-        let funcType = funType argTypes resultType
-        let closuleType = localTypeToCliType l
+        let argTypes, resultType = funcElements <| getFunctionElements t
+        let funcType = func (argTypes, resultType)
+        let closuleType = localTypeToAsmType l
 
         let acc =
             acc
@@ -403,7 +403,7 @@ let rec g ({ usedLocals = locals } as env) x acc =
                 acc
                 ++Dup
                 +>nonTail env e
-                ++Stfld(fieldRef(cliType <| P.typeof map env.vars e, closuleType, y))
+                ++Stfld(fieldRef(asmType <| P.typeof map env.vars e, closuleType, y))
             )
 
         let { P.useSelf = useSelf } = Map.find l env.globalEnv.fundefs
@@ -444,31 +444,31 @@ let rec g ({ usedLocals = locals } as env) x acc =
     // callvirt instance !$(ys.length) class [mscorlib]System.Func`…<…>::Invoke(!0, !1, …)
     | P.AppCls(x, ys) ->
         let closureType = P.typeof map env.vars x
-        let _, resultType = getCliFunctionElements closureType
-        let argLendth = getFunctionElements closureType |> fst |> List.length
+        let argTypes, resultType = getFunctionElements closureType |> funcElements
+        let argLendth = List.length argTypes
 
-        let closureType = cliType closureType
+        let closureType = asmType closureType
         let resultType = resultType |> Option.map (fun _ -> TypeArgmentIndex argLendth)
         let argTypes = List.init argLendth TypeArgmentIndex
 
         acc
         +>nonTail env x
-        +>nonTailUnitValueMany env ys
+        +>nonTailMany env ys
         ++callvirt(resultType, closureType, "Invoke", argTypes)
         +>ldUnit env resultType
         +>ret env
 
     | P.AppDir((Id.L("min_caml_create_array" as x), t), ys) ->
-        let elementType = getFunctionElements t |> snd |> getArrayElement |> cliType
+        let elementType = getFunctionElements t |> snd |> getArrayElement |> asmType
         let et = MethodArgmentIndex 0
         acc
-        +>nonTailUnitValueMany env ys
+        +>nonTailMany env ys
         ++call(Static, Some (Array et), topLevelType, x, [elementType], [Int32; et])
         +>ret env
 
     | P.AppDir((Id.L("min_caml_create_float_array" as x), _), ys) ->
         acc
-        +>nonTailUnitValueMany env ys
+        +>nonTailMany env ys
         ++call(Static, Some (Array Float64), topLevelType, x, [], [Int32; Float64])
         +>ret env
 
@@ -478,12 +478,12 @@ let rec g ({ usedLocals = locals } as env) x acc =
     //
     // call $(typeof(x).result) MinCamlGlobal::$l($(typeof ys.[0]), $(typeof ys.[1]), …)
     | P.AppDir((Id.L x' as x, t), ys) ->
-        let argTypes, resultType = getCliFunctionElements t
+        let argTypes, resultType = getFunctionElements t |> funcElements
 
         acc
-        +>nonTailUnitValueMany env ys
+        +>nonTailMany env ys
         ++Call(env.isTail && x = env.methodName, methodRef(Static, resultType, topLevelType, x', [], argTypes))
-        +>ldUnit env (getCliFunctionElements t |> snd)
+        +>ldUnit env resultType
         +>ret env
 
     // 組の生成 (caml2html: virtual_tuple)
@@ -517,7 +517,7 @@ let rec g ({ usedLocals = locals } as env) x acc =
         acc
         +>nonTail env x
         +>nonTail env y
-        ++Ldelem(P.typeof map env.vars x |> getArrayElement |> cliType)
+        ++Ldelem(P.typeof map env.vars x |> getArrayElement |> asmType)
         +>ret env
 
     | P.Put(x, y, z) ->
@@ -530,7 +530,7 @@ let rec g ({ usedLocals = locals } as env) x acc =
         +>nonTail env x
         +>nonTail env y
         +>nonTail env z
-        ++Stelem(P.typeof map env.vars z |> cliType)
+        ++Stelem(P.typeof map env.vars z |> asmType)
         +>ldUnit env None
         +>ret env
 
@@ -540,7 +540,7 @@ let rec g ({ usedLocals = locals } as env) x acc =
     | P.ExtArray(Id.L x, et) ->
         let n = Id.L <| "min_caml_" + x
         acc
-        ++Ldsfld { fieldType = Array(cliType et); declaringType = topLevelType; name = n }
+        ++Ldsfld { fieldType = Array(asmType et); declaringType = topLevelType; name = n }
         +>ret env
 
 and nonTail env x = g { env with isTail = false } x
@@ -552,15 +552,15 @@ and makeTuple ({ vars = vars } as env) xs acc =
     match tryTake 7 xs with
     | None
     | Some(_, []) ->
-        let types = List.map (P.typeof map vars >> cliType) xs
-        let tupleType = tupleType types
+        let types = List.map (P.typeof map vars >> asmType) xs
+        let tupleType = tuple types
         let argTypes = List.mapi (fun i _ -> TypeArgmentIndex i) types
         acc
         +>nonTailMany env xs
         ++Newobj(tupleType, argTypes), tupleType
 
     | Some(xs, tail) ->
-        let types7 = List.map (P.typeof map vars >> cliType) xs
+        let types7 = List.map (P.typeof map vars >> asmType) xs
         let acc = acc+>nonTailMany env xs
         let acc, tailType = makeTuple env tail acc
         let tupleType = TypeRef(type_kind.Class, ["mscorlib"], ["System"], [], "Tuple`8", types7 @ [tailType])
@@ -571,7 +571,7 @@ and makeTuple ({ vars = vars } as env) xs acc =
 and letTuple { usedLocals = locals } xts e2 acc =
     let s = P.freeVars e2
     let rec aux xts acc =
-        let tupleType = List.map (snd >> cliType) xts |> tupleType
+        let tupleType = List.map (snd >> asmType) xts |> tuple
         let xts, tail =
             match tryTake 7 xts with
             | None -> xts, []
@@ -582,7 +582,7 @@ and letTuple { usedLocals = locals } xts e2 acc =
             +>many (List.indexed xts) (fun (i, (x, t)) acc ->
                 if not <| Set.contains x s then acc else
 
-                locals := Map.add x (cliType t) !locals
+                locals := Map.add x (asmType t) !locals
 
                 acc
                 ++Dup
@@ -600,9 +600,23 @@ and letTuple { usedLocals = locals } xts e2 acc =
     ++Pop
 
 let methodDef genv access callconv resultType name args formalFvs env e =
-    let env = List.fold (fun env (y, t) -> Map.add y (t, Arg) env) env args
+    let env =
+        List.fold (fun env (y, t) ->
+            let location = match t with Type.Unit -> VirtualUnit | _ -> Arg
+            Map.add y (t, location) env
+        ) env args
+
     let env = List.fold (fun env (z, t) -> Map.add z (t, InstanceField) env) env formalFvs
-    let args = List.map (fun (x, t) -> x, cliType t) args
+
+    let resultType = asmTypeOrVoid resultType
+
+    // Unit 引数を無視
+    let args =
+        args
+        |> List.choose (fun (x, t) ->
+            asmTypeOrVoid t
+            |> Option.map (fun t -> x, t)
+        )
 
     let locals = ref Map.empty
     let env = { globalEnv = genv; vars = env; isUnitValue = false; isTail = true; usedLocals = locals; methodName = name }
@@ -610,15 +624,12 @@ let methodDef genv access callconv resultType name args formalFvs env e =
     let { stack = opcodes; maxSize = maxStack } = g env e stack
     let maxStack = if maxStack <= 8 then None else Some maxStack
     Asm.methodDef
-        (access, callconv, cliTypeOrVoid resultType, name, [], args)
+        (access, callconv, resultType, name, [], args)
         (maxStack, Map.toList !locals)
         (List.rev opcodes)
 
-let compilerGeneratedAttributeType =
-    TypeRef(type_kind.Class, ["mscorlib"], ["System";"Runtime";"CompilerServices"], [], "CompilerGeneratedAttribute", [])
-
 let compilerGenerated = {
-    ctor = ctorRef(compilerGeneratedAttributeType, [])
+    ctor = ctorRef(asmtypeof<System.Runtime.CompilerServices.CompilerGeneratedAttribute>, [])
     args = []
     namedArgs = []
 }
@@ -658,7 +669,7 @@ let compilerGenerated = {
 let closureClass fundefs { P.name = Id.L x' as x, t; P.args = yts; P.useSelf = useSelf; P.formalFreeVars = zts; P.body = e } =
     let (++) xs x = x::xs
 
-    let funcType = cliType t
+    let funcType = asmType t
     let resultType = getFunctionElements t |> snd
     let acc =
         []
@@ -669,7 +680,7 @@ let closureClass fundefs { P.name = Id.L x' as x, t; P.args = yts; P.useSelf = u
         else acc
 
     acc
-    +>many zts (fun (z, y) acc -> acc++field(Public, Instance, cliType y, Id.L z))
+    +>many zts (fun (z, y) acc -> acc++field(Public, Instance, asmType y, Id.L z))
     ++Method defaultCtor
     ++Method(methodDef fundefs Public Instance resultType (Id.L "Invoke") yts ((x', t)::zts) Map.empty e)
     |> List.rev

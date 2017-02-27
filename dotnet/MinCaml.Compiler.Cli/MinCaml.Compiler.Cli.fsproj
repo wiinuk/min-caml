@@ -59,6 +59,9 @@
     <Compile Include="..\stackAlloc.fs">
       <Link>stackAlloc.fs</Link>
     </Compile>
+    <Compile Include="..\asmType.fs">
+      <Link>asmType.fs</Link>
+    </Compile>
     <Compile Include="..\asm.fs">
       <Link>asm.fs</Link>
     </Compile>
