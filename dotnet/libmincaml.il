@@ -6,9 +6,7 @@
 
 .class public abstract sealed beforefieldinit MinCamlGlobal
 {
-    .method public static void min_caml_print_newline(
-        class [mscorlib]System.DBNull _arg1
-    )
+    .method public static void min_caml_print_newline()
     cil managed
     {
         call void [mscorlib]System.Console::WriteLine()
@@ -72,9 +70,7 @@
         ret
     }
 
-    .method public static int32 min_caml_read_int (
-        class [mscorlib]System.DBNull _arg1
-    )
+    .method public static int32 min_caml_read_int ()
     cil managed
     {
         call string [mscorlib]System.Console::ReadLine()
@@ -82,9 +78,7 @@
         ret
     }
 
-    .method public static float64 min_caml_read_float (
-        class [mscorlib]System.DBNull _arg1
-    )
+    .method public static float64 min_caml_read_float ()
     cil managed
     {
         call string [mscorlib]System.Console::ReadLine()

@@ -98,6 +98,10 @@ let recordStdout f =
 
     string s
 
+let reportAssemblyVerify path = recordStdout <| fun _ ->
+    exe ildasm "%s -text" path
+    exe peverify "%s -verbose" path
+
 let testOnce sourceML = async {
     let sourceIL = sourceML@."il"
     let binaryML = sourceML@."ml.exe"
@@ -110,8 +114,8 @@ let testOnce sourceML = async {
 
     let! resultML = expression.invokeAsync binaryML ""
     let! resultFS = expression.invokeAsync binaryFS ""
-
-    Assert.Equal(resultFS, resultML)
+    if resultML <> resultFS then
+        failwith <| reportAssemblyVerify binaryML
 }
 
 let sourcesDirectory = pwd/"sources"
@@ -185,10 +189,7 @@ let invokeML sourceML =
     with
     | :? TargetInvocationException & InnerException(:? InvalidProgramException & e) ->
         minCamlAssembly.Save sourceDML
-        let errorMessage = recordStdout <| fun _ ->
-            exe ildasm "%s -text" sourceDML
-            exe peverify "%s -verbose" sourceDML
-
+        let errorMessage = reportAssemblyVerify sourceDML
         raise <| exn(errorMessage, e)
 
 type C = class end

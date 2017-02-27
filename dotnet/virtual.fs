@@ -193,10 +193,8 @@ let ldUnit { isUnitValue = isUnitValue } t acc =
 
 // TODO: locals の使用状況を vars から解析して、locals をできるだけ減らす
 /// 式の仮想マシンコード生成 (caml2html: virtual_g)
-let rec g ({ usedLocals = locals } as env) x acc =
+let rec g env x acc =
     match x with
-
-    // TODO: 可能ならば unit型 を void に unit値 を Nop に置き換える
     | P.Unit ->
         if env.isUnitValue then acc++Ldnull+>ret env
         else acc+>ret env
@@ -273,6 +271,7 @@ let rec g ({ usedLocals = locals } as env) x acc =
     // stloc $x
     // $e2
     | P.Let((x, t1), e1, e2) ->
+        let { usedLocals = locals } = env
         locals := Map.add x (asmType t1) !locals
 
         nonTail env e1 acc
@@ -283,6 +282,7 @@ let rec g ({ usedLocals = locals } as env) x acc =
 
     // 静的メソッドから Func<…> を作成
     | P.LetCls((x, t), { P.entry = Id.L l' as l; P.actual_fv = [] }, e2) ->
+        let { usedLocals = locals } = env
         locals := Map.add x (asmType t) !locals
     
         let argTypes, resultType = funcElements <| getFunctionElements t
@@ -302,6 +302,7 @@ let rec g ({ usedLocals = locals } as env) x acc =
 
     // インスタンスメソッドから Func<…> を作成
     | P.LetCls((x, t), closure, e2) ->
+        let { usedLocals = locals } = env
         locals := Map.add x (asmType t) !locals
 
         g env (P.Cls(t, closure)) acc

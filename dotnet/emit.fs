@@ -124,7 +124,7 @@ let ldcR8 oc x =
 
     if Double.IsNaN x || Double.IsInfinity x then
 
-        // TODO: エンディアンを考慮する必要がある?
+        // NOTE: エンディアンを考慮する必要がある?
         wrapBytes oc <| BitConverter.GetBytes x
 
     else
