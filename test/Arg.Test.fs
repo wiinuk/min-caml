@@ -32,7 +32,7 @@ let parseMinCamlArgsHelp() =
     Assert.Equal(expected, actual, LanguagePrimitives.FastGenericEqualityComparer)
 
 [<Fact>]
-let parseMinVamlArgsInvalid() =
+let parseMinCamlArgsInvalid() =
     let expected = Choice2Of3 "unrecognized argument: -unrecognizedarg\nusage\n\t-inline <int>: maximum size of functions inlined\n\t-iter <int>: maximum number of optimizations iterated\n\t--help: display this list of options\n\t-help: display this list of options\n", -1, -1, []
     let actual = parseMinCamlArgs [|"min-caml"; "-unrecognizedarg"|]
     Assert.Equal(expected, actual, LanguagePrimitives.FastGenericEqualityComparer)

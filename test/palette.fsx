@@ -13,42 +13,36 @@ let emit x =
     w.GetStringBuilder().ToString()
 
 "
-let rec f x = x + 123 in
-let rec g y = f in
-print_int ((g 456) 789)
+a.(0).(0) <- 0;
+a.(1).(1) <- 2
 "
 |> Lexing.from_string
 |> Test.parseClosure 1000
-//|> ClosurePrinter.prog |> String.concat ""
+// |> ClosurePrinter.prog |> String.concat ""
 (*
-f.6 : (int) => int (x.7 : int) {} =
-    Ti5.8 : int = 123
-    x.7 + Ti5.8
-g.9 : (int) => (int) => int (y.10 : int) {f.6 : (int) => int} =
-    f.6
 do
-    f.6 : (int) => int = f.6{}
-    g.9 : (int) => (int) => int = g.9{f.6}
-    Ti1.13 : int = 456
-    Tf2.12 : (int) => int = g.9#(Ti1.13)
-    Ti3.14 : int = 789
-    Ti4.11 : int = Tf2.12#(Ti3.14)
-    min_caml_print_int(Ti4.11)
+    Ta2.14 : [[int]] = (extern a)
+    Ti3.15 : int = 0
+    Ta4.13 : [int] = Ta2.14[Ti3.15]
+    Ti5.16 : int = 0
+    Ti6.17 : int = 0
+    Tu1.12 : () = Ta4.13[Ti5.16] <- Ti6.17
+    Ta7.19 : [[int]] = (extern a)
+    Ti8.20 : int = 1
+    Ta9.18 : [int] = Ta7.19[Ti8.20]
+    Ti10.21 : int = 1
+    Ti11.22 : int = 2
+    Ta9.18[Ti10.21] <- Ti11.22
 *)
 |> Test.closureToTree
 |> StackAlloc.f
-//|> TreePrinter.prog |> String.concat ""
+// |> TreePrinter.prog |> String.concat ""
 (*
-f.6 : (int) => int (x.7 : int) {} =
-    x.7 + 123
-g.9 : (int) => (int) => int (y.10 : int) {f.6 : (int) => int} =
-    f.6
 do
-    f.6 : (int) => int = f.6{}
-    g.9 : (int) => (int) => int = g.9{f.6 = f.6}
-    Tf2.12 : (int) => int = g.9#(456)
-    Ti4.11 : int = Tf2.12#(789)
-    (min_caml_print_int : (int) => ())(Ti4.11)
+    Ta4.13 = (extern a)[0]
+    Ta4.13[0] <- 0
+    Ta9.18 = (extern a)[1]
+    Ta9.18[1] <- 2
 *)
 |> Virtual.f'
 |> emit
@@ -138,4 +132,5 @@ childItem.get "*.ml.exe"
     % exe peverify "%A /verbose"
     
 (*
+
 *)

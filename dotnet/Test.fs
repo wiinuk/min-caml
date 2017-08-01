@@ -123,7 +123,7 @@ let sources() =
     cd sourcesDirectory
     gci "*.ml" |> select (fun x -> [|x.Name|])
 
-[<Theory; MemberData "sources"; Trait("emit target", "ilasm")>]
+// [<Theory; MemberData "sources"; Trait("emit target", "ilasm")>]
 let test sourceML =
     cd sourcesDirectory
     testOnce sourceML |> Async.StartAsTask

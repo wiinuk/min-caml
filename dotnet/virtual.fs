@@ -22,13 +22,14 @@ type global_env = {
     fundefs: Map<Id.l, P.fundef>
 }
 
+type locals = Map<Id.t, Id.t * asm_type> ref
 type env = {
     globalEnv: global_env
     vars: Map<Id.t, Type.t * location>
     isTail: bool
     isUnitValue: bool
     methodName: Id.l
-    usedLocals: Map<Id.t, asm_type> ref
+    usedLocals: locals
 }
 let addMany xts l ({ vars = vars } as env) =
     { env with vars = List.fold (fun map (x, t) -> Map.add x (t, l) map) vars xts }
@@ -191,7 +192,25 @@ let ldUnit { isUnitValue = isUnitValue } t acc =
     if isUnitValue && Option.isNone t then acc++Ldnull
     else acc
 
-// TODO: locals の使用状況を vars から解析して、locals をできるだけ減らす
+// locals の使用状況を vars から解析して、locals をできるだけ減らす
+let allocLocal { usedLocals = locals; vars = vars } x t =
+    let asmType = asmType t
+
+    // vars の中になく型が等しい local ( 未使用 local ) を探す
+    let l =
+        Map.tryPick (fun x' (l', t') ->
+            if asmType = t' && not (Map.containsKey x' vars) then Some l'
+            else None
+        ) !locals
+    
+    let l =
+        match l with
+        | Some l -> l
+        | None -> Id.gentmp t
+
+    locals := Map.add x (l, asmType) !locals
+    l
+
 /// 式の仮想マシンコード生成 (caml2html: virtual_g)
 let rec g env x acc =
     match x with
@@ -238,7 +257,7 @@ let rec g env x acc =
         let acc =
             let t, location = Map.find x env.vars
             match location with
-            | Local -> acc++Ldloc x
+            | Local -> acc++Ldloc(Map.find x !env.usedLocals |> fst)
             | Arg -> acc++Ldarg x
             | VirtualUnit -> acc
             | This -> acc++Ldarg0
@@ -271,26 +290,26 @@ let rec g env x acc =
     // stloc $x
     // $e2
     | P.Let((x, t1), e1, e2) ->
-        let { usedLocals = locals } = env
-        locals := Map.add x (asmType t1) !locals
-
-        nonTail env e1 acc
-        ++Stloc x
-        +>g { env with vars = M.add x (t1, Local) env.vars } e2
+        let acc = acc+>nonTail env e1
+        let env = { env with vars = M.add x (t1, Local) env.vars }
+        acc
+        ++Stloc(allocLocal env x t1)
+        +>g env e2
 
     // クロージャの生成 (caml2html: virtual_makecls)
 
     // 静的メソッドから Func<…> を作成
     | P.LetCls((x, t), { P.entry = Id.L l' as l; P.actual_fv = [] }, e2) ->
-        let { usedLocals = locals } = env
-        locals := Map.add x (asmType t) !locals
-    
         let argTypes, resultType = funcElements <| getFunctionElements t
         let m = methodRef(Static, resultType, topLevelType, l', [], argTypes)
+        let acc =
+            acc
+            +>getOrCreateStaticCachedDelegate env m l
+
+        let env = { env with vars = Map.add x (t, Local) env.vars }
         acc
-        +>getOrCreateStaticCachedDelegate env m l
-        ++Stloc x
-        +>g { env with vars = Map.add x (t, Local) env.vars } e2
+        ++Stloc(allocLocal env x t)
+        +>g env e2
         
     // 静的メソッドから Func<…> を作成
     | P.Cls(t, { P.entry = Id.L l' as l; P.actual_fv = [] }) ->
@@ -302,12 +321,14 @@ let rec g env x acc =
 
     // インスタンスメソッドから Func<…> を作成
     | P.LetCls((x, t), closure, e2) ->
-        let { usedLocals = locals } = env
-        locals := Map.add x (asmType t) !locals
+        let acc =
+            acc
+            +>g env (P.Cls(t, closure))
 
-        g env (P.Cls(t, closure)) acc
-        ++Stloc x
-        +>g { env with vars = Map.add x (t, Local) env.vars } e2
+        let env = { env with vars = Map.add x (t, Local) env.vars }
+        acc
+        ++Stloc(allocLocal env x t)
+        +>g env e2
 
     | P.Cls(t, { P.entry = l; P.actual_fv = ys }) ->
         // [mincaml|let $x : $($ts -> $r) = let rec $l … = … $ys … in $e2|]
@@ -509,10 +530,11 @@ let rec g env x acc =
     //
     // $e2
     | P.LetTuple(xts, y, e2) ->
+        let acc = acc+>nonTail env y
+        let env = addMany xts Local env
         acc
-        +>nonTail env y
         +>letTuple env xts e2
-        +>g (addMany xts Local env) e2
+        +>g env e2
 
     | P.Get(x, y) ->
         acc
@@ -569,7 +591,7 @@ and makeTuple ({ vars = vars } as env) xs acc =
         acc
         ++Newobj(tupleType, argTypes8), tupleType
 
-and letTuple { usedLocals = locals } xts e2 acc =
+and letTuple env xts e2 acc =
     let s = P.freeVars e2
     let rec aux xts acc =
         let tupleType = List.map (snd >> asmType) xts |> tuple
@@ -583,12 +605,10 @@ and letTuple { usedLocals = locals } xts e2 acc =
             +>many (List.indexed xts) (fun (i, (x, t)) acc ->
                 if not <| Set.contains x s then acc else
 
-                locals := Map.add x (asmType t) !locals
-
                 acc
                 ++Dup
                 ++getProp(Instance, TypeArgmentIndex i, tupleType, "Item" + string (i + 1))
-                ++Stloc x
+                ++Stloc(allocLocal env x t)
             )
 
         if List.isEmpty tail then acc else
@@ -624,9 +644,16 @@ let methodDef genv access callconv resultType name args formalFvs env e =
     let stack = { stack = []; maxSize = 8; size = 0 }
     let { stack = opcodes; maxSize = maxStack } = g env e stack
     let maxStack = if maxStack <= 8 then None else Some maxStack
+    let locals =
+        !locals
+        |> Map.toSeq
+        |> Seq.map snd
+        |> Seq.distinct
+        |> Seq.toList
+
     Asm.methodDef
         (access, callconv, resultType, name, [], args)
-        (maxStack, Map.toList !locals)
+        (maxStack, locals)
         (List.rev opcodes)
 
 let compilerGenerated = {
