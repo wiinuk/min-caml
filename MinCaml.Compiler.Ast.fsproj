@@ -62,17 +62,17 @@
     <Compile Include="Type.fs" />
     <Compile Include="Id.fs" />
     <Compile Include="Syntax.fs" />
-    <FsYacc Include="parser.mly">
-      <OtherFlags>--light-off --module Parser</OtherFlags>
+    <FsYacc Include="parser.fsy">
+      <OtherFlags>--module Parser</OtherFlags>
     </FsYacc>
     <Compile Include="parser.fsi">
-      <DependentUpon>parser.mly</DependentUpon>
+      <DependentUpon>parser.fsy</DependentUpon>
     </Compile>
     <Compile Include="parser.fs">
-      <DependentUpon>parser.mly</DependentUpon>
+      <DependentUpon>parser.fsy</DependentUpon>
     </Compile>
     <FsLex Include="lexer.fsl">
-      <OtherFlags>--light-off --unicode</OtherFlags>
+      <OtherFlags>--unicode</OtherFlags>
     </FsLex>
     <Compile Include="lexer.fs">
       <DependentUpon>lexer.fsl</DependentUpon>
