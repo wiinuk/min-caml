@@ -87,10 +87,10 @@ rule token = parse
     { IDENT(LexBuffer<_>.LexemeString lexbuf) }
 | _
     { failwith
-	(Printf.sprintf "unknown token %s near characters %d-%d"
-	   (LexBuffer<_>.LexemeString lexbuf)
-	   (lexbuf.StartPos.pos_cnum)
-	   (lexbuf.EndPos.pos_cnum)) }
+    (Printf.sprintf "unknown token %s near characters %d-%d"
+       (LexBuffer<_>.LexemeString lexbuf)
+       (lexbuf.StartPos.pos_cnum)
+       (lexbuf.EndPos.pos_cnum)) }
 and comment = parse
 | "*)"
     { () }

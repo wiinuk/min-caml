@@ -1,3 +1,5 @@
+module Type
+
 type t = (* MinCamlの型を表現するデータ型 (caml2html: type_t) *)
   | Unit
   | Bool

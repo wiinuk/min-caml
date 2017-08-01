@@ -1,3 +1,4 @@
+module Elim
 open KNormal
 
 let rec effect = function (* 副作用の有無 (caml2html: elim_effect) *)
@@ -18,10 +19,11 @@ let rec f = function (* 不要定義削除ルーチン本体 (caml2html: elim_f)
   | LetRec({ name = (x, t); args = yts; body = e1 }, e2) -> (* let recの場合 (caml2html: elim_letrec) *)
       let e2' = f e2 in
       if Set.contains x (fv e2') then
-	LetRec({ name = (x, t); args = yts; body = f e1 }, e2')
+        LetRec({ name = (x, t); args = yts; body = f e1 }, e2')
       else
-	(eprintf "eliminating function %s@." x;
-	 e2')
+        eprintf "eliminating function %s@." x;
+        e2'
+
   | LetTuple(xts, y, e) ->
       let xs = List.map fst xts in
       let e' = f e in

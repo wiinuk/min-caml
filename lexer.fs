@@ -375,10 +375,10 @@ and _fslex_token  _fslex_state lexbuf =
   | 35 -> ( 
 # 89 "lexer.fsl"
                      failwith
-               	(Printf.sprintf "unknown token %s near characters %d-%d"
-               	   (LexBuffer<_>.LexemeString lexbuf)
-               	   (lexbuf.StartPos.pos_cnum)
-               	   (lexbuf.EndPos.pos_cnum)) 
+                   (Printf.sprintf "unknown token %s near characters %d-%d"
+                      (LexBuffer<_>.LexemeString lexbuf)
+                      (lexbuf.StartPos.pos_cnum)
+                      (lexbuf.EndPos.pos_cnum)) 
 # 382 "lexer.fs"
           )
   | _ -> failwith "token"

@@ -1,3 +1,4 @@
+module Inline
 open KNormal
 
 (* インライン展開する関数の最大サイズ (caml2html: inline_threshold) *)
@@ -20,11 +21,11 @@ let rec g env = function (* インライン展開ルーチン本体 (caml2html: 
       let (zs, e) = Map.find x env in
       eprintf "inlining %s@." x;
       let env' =
-	List.fold2
-	  (fun env' (z, t) y -> Map.add z y env')
-	  Map.empty
-	  zs
-	  ys in
+        List.fold2
+          (fun env' (z, t) y -> Map.add z y env')
+          Map.empty
+          zs
+          ys in
       Alpha.g env' e
   | LetTuple(xts, y, e) -> LetTuple(xts, y, g env e)
   | e -> e

@@ -58,11 +58,10 @@
     <Content Include="packages.config" />
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Arg.fs" />
-    <Compile Include="ocaml.compatibility.system.fs" />
     <Compile Include="extensions.fs" />
-    <Compile Include="type.ml" />
-    <Compile Include="id.ml" />
-    <Compile Include="syntax.ml" />
+    <Compile Include="Type.fs" />
+    <Compile Include="Id.fs" />
+    <Compile Include="Syntax.fs" />
     <FsYacc Include="parser.mly">
       <OtherFlags>--light-off --module Parser</OtherFlags>
     </FsYacc>
@@ -78,16 +77,15 @@
     <Compile Include="lexer.fs">
       <DependentUpon>lexer.fsl</DependentUpon>
     </Compile>
-    <Compile Include="typing.ml" />
-    <Compile Include="kNormal.ml" />
-    <Compile Include="alpha.ml" />
-    <Compile Include="beta.ml" />
-    <Compile Include="assoc.ml" />
-    <Compile Include="inline.ml" />
-    <Compile Include="constFold.ml" />
-    <Compile Include="elim.ml" />
-    <Compile Include="closure.ml" />
-    <None Include="eucjp2Utf8.fsx" />
+    <Compile Include="Typing.fs" />
+    <Compile Include="KNormal.fs" />
+    <Compile Include="Alpha.fs" />
+    <Compile Include="Beta.fs" />
+    <Compile Include="Assoc.fs" />
+    <Compile Include="Inline.fs" />
+    <Compile Include="ConstFold.fs" />
+    <Compile Include="Elim.fs" />
+    <Compile Include="Closure.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="FSharp.Core">

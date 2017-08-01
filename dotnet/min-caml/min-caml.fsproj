@@ -55,9 +55,7 @@
   <ItemGroup>
     <Content Include="packages.config" />
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="..\..\main.ml">
-      <Link>main.ml</Link>
-    </Compile>
+    <Compile Include="main.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="FSharp.Core">
