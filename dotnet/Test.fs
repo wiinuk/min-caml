@@ -7,6 +7,7 @@ open System.Reflection
 open System.Reflection.Emit
 open System.Threading.Tasks
 open System.Text
+open Microsoft.FSharp.Text.Lexing
 
 //                 - 出力ファイル -
 // --out:<file>                   出力ファイルの名前 (短い形式: -o)
@@ -169,7 +170,7 @@ let parse iterationCount b =
 let compileFileToAssembly sourcePath iterationCount assemblySettings =
     use inchan = new StreamReader(File.OpenRead sourcePath, Encoding.UTF8, detectEncodingFromByteOrderMarks = false)
     inchan
-    |> Lexing.from_channel
+    |> LexBuffer<_>.FromTextReader
     |> parse iterationCount
     |> DynamicAssembly.defineMinCamlAssembly assemblySettings
 

@@ -2,6 +2,7 @@
 module Lexer
 // lexerが利用する変数、関数、型などの定義
 
+open Microsoft.FSharp.Text.Lexing
 open Parser
 open Type
 }
@@ -29,9 +30,9 @@ rule token = parse
 | "not"
     { NOT }
 | digit+ (* 整数を字句解析するルール (caml2html: lexer_int) *)
-    { INT(int (Lexing.lexeme lexbuf)) }
+    { INT(int (LexBuffer<_>.LexemeString lexbuf)) }
 | digit+ ('.' digit*)? (['e' 'E'] ['+' '-']? digit+)?
-    { FLOAT(float (Lexing.lexeme lexbuf)) }
+    { FLOAT(float (LexBuffer<_>.LexemeString lexbuf)) }
 | '-' (* -.より後回しにしなくても良い? 最長一致? *)
     { MINUS }
 | '+' (* +.より後回しにしなくても良い? 最長一致? *)
@@ -83,13 +84,13 @@ rule token = parse
 | eof
     { EOF }
 | lower (digit|lower|upper|'_')* (* 他の「予約語」より後でないといけない *)
-    { IDENT(Lexing.lexeme lexbuf) }
+    { IDENT(LexBuffer<_>.LexemeString lexbuf) }
 | _
     { failwith
 	(Printf.sprintf "unknown token %s near characters %d-%d"
-	   (Lexing.lexeme lexbuf)
-	   (Lexing.lexeme_start lexbuf)
-	   (Lexing.lexeme_end lexbuf)) }
+	   (LexBuffer<_>.LexemeString lexbuf)
+	   (lexbuf.StartPos.pos_cnum)
+	   (lexbuf.EndPos.pos_cnum)) }
 and comment = parse
 | "*)"
     { () }

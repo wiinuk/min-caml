@@ -58,14 +58,13 @@
     <Content Include="packages.config" />
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Arg.fs" />
-    <Compile Include="ocaml.compatibility.lexyacc.fs" />
     <Compile Include="ocaml.compatibility.system.fs" />
     <Compile Include="extensions.fs" />
     <Compile Include="type.ml" />
     <Compile Include="id.ml" />
     <Compile Include="syntax.ml" />
     <FsYacc Include="parser.mly">
-      <OtherFlags>--light-off --module Parser --ml-compatibility</OtherFlags>
+      <OtherFlags>--light-off --module Parser</OtherFlags>
     </FsYacc>
     <Compile Include="parser.fsi">
       <DependentUpon>parser.mly</DependentUpon>

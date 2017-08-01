@@ -1,5 +1,6 @@
 open System.IO
 open System.Text
+open Microsoft.FSharp.Text.Lexing
 
 let limit = ref 1000
 
@@ -24,12 +25,12 @@ let lexbuf outchan l = (* バッファをコンパイルしてチャンネルへ
 			 (Typing.f
 			    (Parser.exp Lexer.token l)))))))))
 
-let string s = lexbuf stdout (Lexing.from_string s) (* 文字列をコンパイルして標準出力に表示する (caml2html: main_string) *)
+let string s = lexbuf stdout (LexBuffer<_>.FromString s) (* 文字列をコンパイルして標準出力に表示する (caml2html: main_string) *)
 
 let file f = (* ファイルをコンパイルしてファイルに出力する (caml2html: main_file) *)
   use inchan = new StreamReader(File.OpenRead(f + ".ml"), Encoding.UTF8, detectEncodingFromByteOrderMarks = false) in
   use outchan = new StreamWriter(File.OpenWrite(f + ".il"), Encoding.UTF8) in
-  lexbuf outchan (Lexing.from_channel inchan);
+  lexbuf outchan (LexBuffer<_>.FromTextReader inchan);
   
 // ここからコンパイラの実行が開始される (caml2html: main_entry)
 [<EntryPoint>]

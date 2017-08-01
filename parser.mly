@@ -4,6 +4,7 @@ open Syntax
 let addtyp x = (x, Type.gentyp ())
 %}
 
+
 /* (* 字句を表すデータ型の定義 (caml2html: parser_token) *) */
 %token <bool> BOOL
 %token <int> INT
@@ -133,11 +134,7 @@ exp: /* (* 一般の式 (caml2html: parser_exp) *) */
 | ARRAY_CREATE simple_exp simple_exp
     %prec prec_app
     { Array($2, $3) }
-| error
-    { failwith
-	(Printf.sprintf "parse error near characters %d-%d"
-	   (Parsing.symbol_start ())
-	   (Parsing.symbol_end ())) }
+| error { failwith "parse error" }
 
 fundef:
 | IDENT formal_args EQUAL exp
