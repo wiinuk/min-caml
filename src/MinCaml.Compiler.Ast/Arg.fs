@@ -3,6 +3,7 @@ open System
 open System.Text
 open System.Text.RegularExpressions
 
+[<NoComparison; NoEquality>]
 type spec =
     | Unit of (unit -> unit)
     | Int of (int -> unit)
@@ -21,7 +22,8 @@ type doc = string
 [<AutoOpen>]
 module internal Internal =
     open Microsoft.FSharp.Core.Printf
-
+    
+    [<NoComparison; NoEquality>]
     type env = {
         specs: (key * spec * doc) list
         other: (string -> unit)

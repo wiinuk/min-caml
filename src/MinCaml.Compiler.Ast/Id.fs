@@ -1,19 +1,20 @@
 module MinCaml.Compiler.Ast.Id
 
-type t = string (* 変数の名前 (caml2html: id_t) *)
-type l = L of string (* トップレベル関数やグローバル配列のラベル (caml2html: id_l) *)
+/// 変数の名前
+type t = string
 
-let rec pp_list = function
-  | [] -> ""
-  | [x] -> x
-  | x :: xs -> x + " " + pp_list xs
+/// トップレベル関数やグローバル配列のラベル
+type l = L of string
 
+let ppList xs = String.concat " " xs
+
+// TODO: internal
 let counter = ref 0
 let genid s =
-  incr counter;
-  Printf.sprintf "%s.%d" s !counter
+    incr counter
+    sprintf "%s.%d" s !counter
 
-let rec id_of_typ = function
+let rec ofType = function
   | Type.Unit -> "u"
   | Type.Bool -> "b"
   | Type.Int -> "i"
@@ -24,5 +25,5 @@ let rec id_of_typ = function
   | Type.Var _ -> unreachable
 
 let gentmp typ =
-  incr counter;
-  Printf.sprintf "T%s%d" (id_of_typ typ) !counter
+    incr counter
+    sprintf "T%s%d" (ofType typ) !counter

@@ -193,7 +193,7 @@ let rec expr env = function
 
     | P.LetTuple(xts, x, scope) -> LetTuple(xts, Var x, expr (addVars xts env) scope)
     | P.Let((x1, t1) as xt1, e1, e2) -> Let(xt1, expr env e1, expr (Map.add x1 t1 env) e2)
-    | P.MakeCls((x1, t1) as xt1, { Closure.entry = l; Closure.actual_fv = fvs }, e2) ->
+    | P.MakeCls((x1, t1) as xt1, { Closure.entry = l; Closure.actualFv = fvs }, e2) ->
         let closure = { entry = l; actual_fv = List.map (fun v -> Id.L v, Var v) fvs }
         let scope = expr (Map.add x1 t1 env) e2
         if List.contains x1 fvs
@@ -201,7 +201,7 @@ let rec expr env = function
         else Let((x1, t1), Cls(t1, closure), scope)
             
 
-let fundef env { P.name = Id.L x, _ as name; P.args = args; P.formal_fv = formal_fv; P.body = body } =
+let fundef env { P.name = Id.L x, _ as name; P.args = args; P.formalFv = formal_fv; P.body = body } =
     let env = addVars args env |> addVars formal_fv
     let useSelf = Set.contains x <| P.fv body
     {

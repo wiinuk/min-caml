@@ -1,5 +1,6 @@
 %{
 (* parserが利用する変数、関数、型などの定義 *)
+#nowarn "1182" // unuse value
 open Syntax
 let addtyp x = (x, Type.gentyp ())
 %}

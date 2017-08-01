@@ -77,7 +77,7 @@ module ClosurePrinter =
             yield! exp i e2
 
         | Var x -> yield x
-        | MakeCls(xt, { entry = Id.L entry; actual_fv = actual_fv }, e2) ->
+        | MakeCls(xt, { entry = Id.L entry; actualFv = actual_fv }, e2) ->
             yield! typed xt
             yield " = "
             yield entry
@@ -122,7 +122,7 @@ module ClosurePrinter =
         yield! exp (i + 1) e2
         }
 
-    let fundef { name = Id.L name, t; args = args; formal_fv = formal_fv; body = body } = seq {
+    let fundef { name = Id.L name, t; args = args; formalFv = formal_fv; body = body } = seq {
         yield! typed (name, t)
         yield " "
         yield! List.map typed args |> wrapTuple
@@ -297,8 +297,6 @@ module TreePrinter =
         yield! exp 1 main
         yield! newline 0
     }
-
-
 
     Id.counter := 0
     Typing.extenv := Map.empty
