@@ -9,7 +9,7 @@ let rec iter n e = (* 最適化処理をくりかえす (caml2html: main_iter) *
 
 let lexbuf outchan l = (* バッファをコンパイルしてチャンネルへ出力する (caml2html: main_lexbuf) *)
   Id.counter := 0;
-  Typing.extenv := M.empty;
+  Typing.extenv := Map.empty;
   Emit.f outchan
     (RegAlloc.f
        (Simm.f
@@ -31,14 +31,10 @@ let file f = (* ファイルをコンパイルしてファイルに出力する 
     close_in inchan;
     close_out outchan;
   with e -> (close_in inchan; close_out outchan; raise e)
-
-(*F#
+  
+// ここからコンパイラの実行が開始される (caml2html: main_entry)
 [<EntryPoint>]
 do
-F#*)
-(*IF-OCAML*)
-let () = (* ここからコンパイラの実行が開始される (caml2html: main_entry) *)
-(*ENDIF-OCAML*)
   let files = ref [] in
   Arg.parse
     [("-inline", Arg.Int(fun i -> Inline.threshold := i), "maximum size of functions inlined");

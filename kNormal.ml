@@ -27,19 +27,19 @@ type t = (* K正規化後の式 (caml2html: knormal_t) *)
 and fundef = { name : Id.t * Type.t; args : (Id.t * Type.t) list; body : t }
 
 let rec fv = function (* 式に出現する（自由な）変数 (caml2html: knormal_fv) *)
-  | Unit | Int(_) | Float(_) | ExtArray(_) -> S.empty
-  | Neg(x) | FNeg(x) -> S.singleton x
-  | Add(x, y) | Sub(x, y) | FAdd(x, y) | FSub(x, y) | FMul(x, y) | FDiv(x, y) | Get(x, y) -> S.of_list [x; y]
-  | IfEq(x, y, e1, e2) | IfLE(x, y, e1, e2) -> S.add x (S.add y (S.union (fv e1) (fv e2)))
-  | Let((x, t), e1, e2) -> S.union (fv e1) (S.remove x (fv e2))
-  | Var(x) -> S.singleton x
+  | Unit | Int(_) | Float(_) | ExtArray(_) -> Set.empty
+  | Neg(x) | FNeg(x) -> Set.singleton x
+  | Add(x, y) | Sub(x, y) | FAdd(x, y) | FSub(x, y) | FMul(x, y) | FDiv(x, y) | Get(x, y) -> Set.ofList [x; y]
+  | IfEq(x, y, e1, e2) | IfLE(x, y, e1, e2) -> Set.add x (Set.add y (Set.union (fv e1) (fv e2)))
+  | Let((x, t), e1, e2) -> Set.union (fv e1) (Set.remove x (fv e2))
+  | Var(x) -> Set.singleton x
   | LetRec({ name = (x, t); args = yts; body = e1 }, e2) ->
-      let zs = S.diff (fv e1) (S.of_list (List.map fst yts)) in
-      S.diff (S.union zs (fv e2)) (S.singleton x)
-  | App(x, ys) -> S.of_list (x :: ys)
-  | Tuple(xs) | ExtFunApp(_, xs) -> S.of_list xs
-  | Put(x, y, z) -> S.of_list [x; y; z]
-  | LetTuple(xs, y, e) -> S.add y (S.diff (fv e) (S.of_list (List.map fst xs)))
+      let zs = Set.difference (fv e1) (Set.ofList (List.map fst yts)) in
+      Set.difference (Set.union zs (fv e2)) (Set.singleton x)
+  | App(x, ys) -> Set.ofList (x :: ys)
+  | Tuple(xs) | ExtFunApp(_, xs) -> Set.ofList xs
+  | Put(x, y, z) -> Set.ofList [x; y; z]
+  | LetTuple(xs, y, e) -> Set.add y (Set.difference (fv e) (Set.ofList (List.map fst xs)))
 
 let insert_let (e, t) k = (* letを挿入する補助関数 (caml2html: knormal_insert) *)
   match e with
@@ -105,20 +105,20 @@ let rec g env = function (* K正規化ルーチン本体 (caml2html: knormal_g) 
   | Syntax.If(e1, e2, e3) -> g env (Syntax.If(Syntax.Eq(e1, Syntax.Bool(false)), e3, e2)) (* 比較のない分岐を変換 (caml2html: knormal_if) *)
   | Syntax.Let((x, t), e1, e2) ->
       let e1', t1 = g env e1 in
-      let e2', t2 = g (M.add x t env) e2 in
+      let e2', t2 = g (Map.add x t env) e2 in
       Let((x, t), e1', e2'), t2
-  | Syntax.Var(x) when M.mem x env -> Var(x), M.find x env
+  | Syntax.Var(x) when Map.containsKey x env -> Var(x), Map.find x env
   | Syntax.Var(x) -> (* 外部配列の参照 (caml2html: knormal_extarray) *)
-      (match M.find x !Typing.extenv with
+      (match Map.find x !Typing.extenv with
       | Type.Array(_) as t -> ExtArray x, t
       | _ -> failwith (Printf.sprintf "external variable %s does not have an array type" x))
   | Syntax.LetRec({ Syntax.name = (x, t); Syntax.args = yts; Syntax.body = e1 }, e2) ->
-      let env' = M.add x t env in
+      let env' = Map.add x t env in
       let e2', t2 = g env' e2 in
-      let e1', t1 = g (M.add_list yts env') e1 in
+      let e1', t1 = g (Map.addList yts env') e1 in
       LetRec({ name = (x, t); args = yts; body = e1' }, e2'), t2
-  | Syntax.App(Syntax.Var(f), e2s) when not (M.mem f env) -> (* 外部関数の呼び出し (caml2html: knormal_extfunapp) *)
-      (match M.find f !Typing.extenv with
+  | Syntax.App(Syntax.Var(f), e2s) when not (Map.containsKey f env) -> (* 外部関数の呼び出し (caml2html: knormal_extfunapp) *)
+      (match Map.find f !Typing.extenv with
       | Type.Fun(_, t) ->
 	  let rec bind xs = function (* "xs" are identifiers for the arguments *)
 	    | [] -> ExtFunApp(f, xs), t
@@ -126,12 +126,7 @@ let rec g env = function (* K正規化ルーチン本体 (caml2html: knormal_g) 
 		insert_let (g env e2)
 		  (fun x -> bind (xs @ [x]) e2s) in
 	  bind [] e2s (* left-to-right evaluation *)
-      (*F#
       | _ -> assert_false())
-      F#*)
-      (*IF-OCAML*)
-      | _ -> assert false)
-      (*ENDIF-OCAML*)
   | Syntax.App(e1, e2s) ->
       (match g env e1 with
       | _, Type.Fun(_, t) as g_e1 ->
@@ -143,12 +138,7 @@ let rec g env = function (* K正規化ルーチン本体 (caml2html: knormal_g) 
 		    insert_let (g env e2)
 		      (fun x -> bind (xs @ [x]) e2s) in
 	      bind [] e2s) (* left-to-right evaluation *)
-      (*F#
       | _ -> assert_false())
-      F#*)
-      (*IF-OCAML*)
-      | _ -> assert false)
-      (*ENDIF-OCAML*)
   | Syntax.Tuple(es) ->
       let rec bind xs ts = function (* "xs" and "ts" are identifiers and types for the elements *)
 	| [] -> Tuple(xs), Type.Tuple(ts)
@@ -160,7 +150,7 @@ let rec g env = function (* K正規化ルーチン本体 (caml2html: knormal_g) 
   | Syntax.LetTuple(xts, e1, e2) ->
       insert_let (g env e1)
 	(fun y ->
-	  let e2', t2 = g (M.add_list xts env) e2 in
+	  let e2', t2 = g (Map.addList xts env) e2 in
 	  LetTuple(xts, y, e2'), t2)
   | Syntax.Array(e1, e2) ->
       insert_let (g env e1)
@@ -179,16 +169,11 @@ let rec g env = function (* K正規化ルーチン本体 (caml2html: knormal_g) 
 	  insert_let g_e1
 	    (fun x -> insert_let (g env e2)
 		(fun y -> Get(x, y), t))
-      (*F#
       | _ -> assert_false())
-      F#*)
-      (*IF-OCAML*)
-      | _ -> assert false)
-      (*ENDIF-OCAML*)
   | Syntax.Put(e1, e2, e3) ->
       insert_let (g env e1)
 	(fun x -> insert_let (g env e2)
 	    (fun y -> insert_let (g env e3)
 		(fun z -> Put(x, y, z), Type.Unit)))
 
-let f e = fst (g M.empty e)
+let f e = fst (g Map.empty e)

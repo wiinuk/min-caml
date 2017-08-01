@@ -1,6 +1,6 @@
 open KNormal
 
-let find x env = try M.find x env with Not_found -> x (* 置換のための関数 (caml2html: beta_find) *)
+let find x env = try Map.find x env with Not_found -> x (* 置換のための関数 (caml2html: beta_find) *)
 
 let rec g env = function (* β簡約ルーチン本体 (caml2html: beta_g) *)
   | Unit -> Unit
@@ -20,7 +20,7 @@ let rec g env = function (* β簡約ルーチン本体 (caml2html: beta_g) *)
       (match g env e1 with
       | Var(y) ->
 	  Format.eprintf "beta-reducing %s = %s@." x y;
-	  g (M.add x y env) e2
+	  g (Map.add x y env) e2
       | e1' ->
 	  let e2' = g env e2 in
 	  Let((x, t), e1', e2'))
@@ -35,4 +35,4 @@ let rec g env = function (* β簡約ルーチン本体 (caml2html: beta_g) *)
   | ExtArray(x) -> ExtArray(x)
   | ExtFunApp(x, ys) -> ExtFunApp(x, List.map (fun y -> find y env) ys)
 
-let f = g M.empty
+let f = g Map.empty

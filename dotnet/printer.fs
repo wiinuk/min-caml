@@ -299,4 +299,4 @@ module TreePrinter =
 
 
     Id.counter := 0
-    Typing.extenv := M.empty
+    Typing.extenv := Map.empty

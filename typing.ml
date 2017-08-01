@@ -5,7 +5,7 @@ open Syntax
 exception Unify of Type.t * Type.t
 exception Error of t * Type.t * Type.t
 
-let extenv = ref M.empty
+let extenv = ref Map.empty
 
 (* for pretty printing (and type normalization) *)
 let rec deref_typ = function (* 型変数を中身でおきかえる関数 (caml2html: typing_deref) *)
@@ -115,17 +115,17 @@ let rec g env e = (* 型推論ルーチン (caml2html: typing_g) *)
 	t2
     | Let((x, t), e1, e2) -> (* letの型推論 (caml2html: typing_let) *)
 	unify t (g env e1);
-	g (M.add x t env) e2
-    | Var(x) when M.mem x env -> M.find x env (* 変数の型推論 (caml2html: typing_var) *)
-    | Var(x) when M.mem x !extenv -> M.find x !extenv
+	g (Map.add x t env) e2
+    | Var(x) when Map.containsKey x env -> Map.find x env (* 変数の型推論 (caml2html: typing_var) *)
+    | Var(x) when Map.containsKey x !extenv -> Map.find x !extenv
     | Var(x) -> (* 外部変数の型推論 (caml2html: typing_extvar) *)
 	Format.eprintf "free variable %s assumed as external@." x;
 	let t = Type.gentyp () in
-	extenv := M.add x t !extenv;
+	extenv := Map.add x t !extenv;
 	t
     | LetRec({ name = (x, t); args = yts; body = e1 }, e2) -> (* let recの型推論 (caml2html: typing_letrec) *)
-	let env = M.add x t env in
-	unify t (Type.Fun(List.map snd yts, g (M.add_list yts env) e1));
+	let env = Map.add x t env in
+	unify t (Type.Fun(List.map snd yts, g (Map.addList yts env) e1));
 	g env e2
     | App(e, es) -> (* 関数適用の型推論 (caml2html: typing_app) *)
 	let t = Type.gentyp () in
@@ -134,7 +134,7 @@ let rec g env e = (* 型推論ルーチン (caml2html: typing_g) *)
     | Tuple(es) -> Type.Tuple(List.map (g env) es)
     | LetTuple(xts, e1, e2) ->
 	unify (Type.Tuple(List.map snd xts)) (g env e1);
-	g (M.add_list xts env) e2
+	g (Map.addList xts env) e2
     | Array(e1, e2) -> (* must be a primitive for "polymorphic" typing *)
 	unify (g env e1) Type.Int;
 	Type.Array(g env e2)
@@ -151,13 +151,13 @@ let rec g env e = (* 型推論ルーチン (caml2html: typing_g) *)
   with Unify(t1, t2) -> raise (Error(deref_term e, deref_typ t1, deref_typ t2))
 
 let f e =
-  extenv := M.empty;
+  extenv := Map.empty;
 (*
   (match deref_typ (g M.empty e) with
   | Type.Unit -> ()
   | _ -> Format.eprintf "warning: final result does not have type unit@.");
 *)
-  (try unify Type.Unit (g M.empty e)
+  (try unify Type.Unit (g Map.empty e)
   with Unify _ -> failwith "top level does not have type unit");
-  extenv := M.map deref_typ !extenv;
+  extenv := Map.mapValue deref_typ !extenv;
   deref_term e

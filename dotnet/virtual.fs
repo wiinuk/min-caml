@@ -291,7 +291,7 @@ let rec g env x acc =
     // $e2
     | P.Let((x, t1), e1, e2) ->
         let acc = acc+>nonTail env e1
-        let env = { env with vars = M.add x (t1, Local) env.vars }
+        let env = { env with vars = Map.add x (t1, Local) env.vars }
         acc
         ++Stloc(allocLocal env x t1)
         +>g env e2

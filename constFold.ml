@@ -1,18 +1,18 @@
 open KNormal
 
 let memi x env =
-  try (match M.find x env with Int(_) -> true | _ -> false)
+  try (match Map.find x env with Int(_) -> true | _ -> false)
   with Not_found -> false
 let memf x env =
-  try (match M.find x env with Float(_) -> true | _ -> false)
+  try (match Map.find x env with Float(_) -> true | _ -> false)
   with Not_found -> false
 let memt x env =
-  try (match M.find x env with Tuple(_) -> true | _ -> false)
+  try (match Map.find x env with Tuple(_) -> true | _ -> false)
   with Not_found -> false
 
-let findi x env = (match M.find x env with Int(i) -> i | _ -> raise Not_found)
-let findf x env = (match M.find x env with Float(d) -> d | _ -> raise Not_found)
-let findt x env = (match M.find x env with Tuple(ys) -> ys | _ -> raise Not_found)
+let findi x env = (match Map.find x env with Int(i) -> i | _ -> raise Not_found)
+let findf x env = (match Map.find x env with Float(d) -> d | _ -> raise Not_found)
+let findt x env = (match Map.find x env with Tuple(ys) -> ys | _ -> raise Not_found)
 
 let rec g env = function (* 定数畳み込みルーチン本体 (caml2html: constfold_g) *)
   | Var(x) when memi x env -> Int(findi x env)
@@ -34,7 +34,7 @@ let rec g env = function (* 定数畳み込みルーチン本体 (caml2html: con
   | IfLE(x, y, e1, e2) -> IfLE(x, y, g env e1, g env e2)
   | Let((x, t), e1, e2) -> (* letのケース (caml2html: constfold_let) *)
       let e1' = g env e1 in
-      let e2' = g (M.add x e1' env) e2 in
+      let e2' = g (Map.add x e1' env) e2 in
       Let((x, t), e1', e2')
   | LetRec({ name = x; args = ys; body = e1 }, e2) ->
       LetRec({ name = x; args = ys; body = g env e1 }, g env e2)
@@ -47,4 +47,4 @@ let rec g env = function (* 定数畳み込みルーチン本体 (caml2html: con
   | LetTuple(xts, y, e) -> LetTuple(xts, y, g env e)
   | e -> e
 
-let f = g M.empty
+let f = g Map.empty

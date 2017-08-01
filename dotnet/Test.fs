@@ -146,7 +146,7 @@ let parseClosure =
     fun iterationCount b -> lock gate <| fun _ ->
 
     Id.counter := 0
-    Typing.extenv := M.empty
+    Typing.extenv := Map.empty
     Parser.exp Lexer.token b
     |> Typing.f
     |> KNormal.f

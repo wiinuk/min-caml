@@ -18,13 +18,9 @@ let rec id_of_typ = function
   | Type.Float -> "d"
   | Type.Fun _ -> "f"
   | Type.Tuple _ -> "t"
-  | Type.Array _ -> "a" 
-  (*F#
+  | Type.Array _ -> "a"
   | Type.Var _ -> assert_false()
-  F#*)
-  (*IF-OCAML*)
-  | Type.Var _ -> assert false
-  (*ENDIF-OCAML*)
+
 let gentmp typ =
   incr counter;
   Printf.sprintf "T%s%d" (id_of_typ typ) !counter
