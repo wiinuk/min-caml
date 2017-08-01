@@ -123,7 +123,9 @@ let sources() =
     cd sourcesDirectory
     gci "*.ml" |> select (fun x -> [|x.Name|])
 
-// [<Theory; MemberData "sources"; Trait("emit target", "ilasm")>]
+let sourcesFirst() = sources() |> Seq.truncate 1
+
+[<Theory; MemberData "sourcesFirst"; Trait("emit target", "ilasm")>]
 let test sourceML =
     cd sourcesDirectory
     testOnce sourceML |> Async.StartAsTask
@@ -165,7 +167,8 @@ let parse iterationCount b =
     |> Virtual.f'
 
 let compileFileToAssembly sourcePath iterationCount assemblySettings =
-    open_in sourcePath
+    use inchan = new StreamReader(File.OpenRead sourcePath, Encoding.UTF8, detectEncodingFromByteOrderMarks = false)
+    inchan
     |> Lexing.from_channel
     |> parse iterationCount
     |> DynamicAssembly.defineMinCamlAssembly assemblySettings

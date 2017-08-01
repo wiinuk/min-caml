@@ -75,8 +75,8 @@ let rec g env known = function (* クロージャ変換ルーチン本体 (caml2
       let known', e1' =
 	if Set.isEmpty zs then known', e1' else
 	(* 駄目だったら状態(toplevelの値)を戻して、クロージャ変換をやり直す *)
-	(Format.eprintf "free variable(s) %s found in function %s@." (Id.pp_list (Set.toList zs)) x;
-	 Format.eprintf "function %s cannot be directly applied in fact@." x;
+	(eprintf "free variable(s) %s found in function %s@." (Id.pp_list (Set.toList zs)) x;
+	 eprintf "function %s cannot be directly applied in fact@." x;
 	 toplevel := toplevel_backup;
 	 let e1' = g (Map.addList yts env') known e1 in
 	 known, e1') in
@@ -87,10 +87,10 @@ let rec g env known = function (* クロージャ変換ルーチン本体 (caml2
       if Set.contains x (fv e2') then (* xが変数としてe2'に出現するか *)
 	MakeCls((x, t), { entry = Id.L(x); actual_fv = zs }, e2') (* 出現していたら削除しない *)
       else
-	(Format.eprintf "eliminating closure(s) %s@." x;
+	(eprintf "eliminating closure(s) %s@." x;
 	 e2') (* 出現しなければMakeClsを削除 *)
   | KNormal.App(x, ys) when Set.contains x known -> (* 関数適用の場合 (caml2html: closure_app) *)
-      Format.eprintf "directly applying %s@." x;
+      eprintf "directly applying %s@." x;
       AppDir(Id.L(x), ys)
   | KNormal.App(f, xs) -> AppCls(f, xs)
   | KNormal.Tuple(xs) -> Tuple(xs)

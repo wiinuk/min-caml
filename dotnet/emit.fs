@@ -2,8 +2,9 @@ module Emit
 open AsmType
 open Asm
 open System
+open System.IO
 
-let (+=) o s = output_string o s
+let (+=) (o: TextWriter) (s: string) = o.Write s
 
 let newline oc i =
     oc += "\r\n"

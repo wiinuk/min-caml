@@ -29,9 +29,9 @@ rule token = parse
 | "not"
     { NOT }
 | digit+ (* 整数を字句解析するルール (caml2html: lexer_int) *)
-    { INT(int_of_string (Lexing.lexeme lexbuf)) }
+    { INT(int (Lexing.lexeme lexbuf)) }
 | digit+ ('.' digit*)? (['e' 'E'] ['+' '-']? digit+)?
-    { FLOAT(float_of_string (Lexing.lexeme lexbuf)) }
+    { FLOAT(float (Lexing.lexeme lexbuf)) }
 | '-' (* -.より後回しにしなくても良い? 最長一致? *)
     { MINUS }
 | '+' (* +.より後回しにしなくても良い? 最長一致? *)
@@ -97,6 +97,6 @@ and comment = parse
     { comment lexbuf;
       comment lexbuf }
 | eof
-    { Format.eprintf "warning: unterminated comment@." }
+    { eprintf "warning: unterminated comment@." }
 | _
     { comment lexbuf }

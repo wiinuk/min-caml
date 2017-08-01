@@ -1,7 +1,10 @@
+open System.IO
+open System.Text
+
 let limit = ref 1000
 
 let rec iter n e = (* 最適化処理をくりかえす (caml2html: main_iter) *)
-  Format.eprintf "iteration %d@." n;
+  eprintf "iteration %d@." n;
   if n = 0 then e else
   let e' = Elim.f (ConstFold.f (Inline.f (Assoc.f (Beta.f e)))) in
   if e = e' then e else
@@ -24,13 +27,9 @@ let lexbuf outchan l = (* バッファをコンパイルしてチャンネルへ
 let string s = lexbuf stdout (Lexing.from_string s) (* 文字列をコンパイルして標準出力に表示する (caml2html: main_string) *)
 
 let file f = (* ファイルをコンパイルしてファイルに出力する (caml2html: main_file) *)
-  let inchan = open_in (f ^ ".ml") in
-  let outchan = open_out (f ^ ".il") in
-  try
-    lexbuf outchan (Lexing.from_channel inchan);
-    close_in inchan;
-    close_out outchan;
-  with e -> (close_in inchan; close_out outchan; raise e)
+  use inchan = new StreamReader(File.OpenRead(f + ".ml"), Encoding.UTF8, detectEncodingFromByteOrderMarks = false) in
+  use outchan = new StreamWriter(File.OpenWrite(f + ".il"), Encoding.UTF8) in
+  lexbuf outchan (Lexing.from_channel inchan);
   
 // ここからコンパイラの実行が開始される (caml2html: main_entry)
 [<EntryPoint>]

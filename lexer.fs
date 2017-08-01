@@ -1,5 +1,5 @@
 #light "off"
-# 1 "lexer.mll"
+# 1 "lexer.fsl"
  
 module Lexer
 // lexerが利用する変数、関数、型などの定義
@@ -196,183 +196,183 @@ and comment  (lexbuf : Microsoft.FSharp.Text.Lexing.LexBuffer<_>) = _fslex_comme
 and _fslex_token  _fslex_state lexbuf =
   match _fslex_tables.Interpret(_fslex_state,lexbuf) with
   | 0 -> ( 
-# 17 "lexer.mll"
+# 17 "lexer.fsl"
                      token lexbuf 
 # 201 "lexer.fs"
           )
   | 1 -> ( 
-# 19 "lexer.mll"
+# 19 "lexer.fsl"
                      comment lexbuf; (* ネストしたコメントのためのトリック *)
                      token lexbuf 
 # 207 "lexer.fs"
           )
   | 2 -> ( 
-# 22 "lexer.mll"
+# 22 "lexer.fsl"
                      LPAREN 
 # 212 "lexer.fs"
           )
   | 3 -> ( 
-# 24 "lexer.mll"
+# 24 "lexer.fsl"
                      RPAREN 
 # 217 "lexer.fs"
           )
   | 4 -> ( 
-# 26 "lexer.mll"
+# 26 "lexer.fsl"
                      BOOL(true) 
 # 222 "lexer.fs"
           )
   | 5 -> ( 
-# 28 "lexer.mll"
+# 28 "lexer.fsl"
                      BOOL(false) 
 # 227 "lexer.fs"
           )
   | 6 -> ( 
-# 30 "lexer.mll"
+# 30 "lexer.fsl"
                      NOT 
 # 232 "lexer.fs"
           )
   | 7 -> ( 
-# 32 "lexer.mll"
-                     INT(int_of_string (Lexing.lexeme lexbuf)) 
+# 32 "lexer.fsl"
+                     INT(int (Lexing.lexeme lexbuf)) 
 # 237 "lexer.fs"
           )
   | 8 -> ( 
-# 34 "lexer.mll"
-                     FLOAT(float_of_string (Lexing.lexeme lexbuf)) 
+# 34 "lexer.fsl"
+                     FLOAT(float (Lexing.lexeme lexbuf)) 
 # 242 "lexer.fs"
           )
   | 9 -> ( 
-# 36 "lexer.mll"
+# 36 "lexer.fsl"
                      MINUS 
 # 247 "lexer.fs"
           )
   | 10 -> ( 
-# 38 "lexer.mll"
+# 38 "lexer.fsl"
                      PLUS 
 # 252 "lexer.fs"
           )
   | 11 -> ( 
-# 40 "lexer.mll"
+# 40 "lexer.fsl"
                      MINUS_DOT 
 # 257 "lexer.fs"
           )
   | 12 -> ( 
-# 42 "lexer.mll"
+# 42 "lexer.fsl"
                      PLUS_DOT 
 # 262 "lexer.fs"
           )
   | 13 -> ( 
-# 44 "lexer.mll"
+# 44 "lexer.fsl"
                      AST_DOT 
 # 267 "lexer.fs"
           )
   | 14 -> ( 
-# 46 "lexer.mll"
+# 46 "lexer.fsl"
                      SLASH_DOT 
 # 272 "lexer.fs"
           )
   | 15 -> ( 
-# 48 "lexer.mll"
+# 48 "lexer.fsl"
                      EQUAL 
 # 277 "lexer.fs"
           )
   | 16 -> ( 
-# 50 "lexer.mll"
+# 50 "lexer.fsl"
                      LESS_GREATER 
 # 282 "lexer.fs"
           )
   | 17 -> ( 
-# 52 "lexer.mll"
+# 52 "lexer.fsl"
                      LESS_EQUAL 
 # 287 "lexer.fs"
           )
   | 18 -> ( 
-# 54 "lexer.mll"
+# 54 "lexer.fsl"
                      GREATER_EQUAL 
 # 292 "lexer.fs"
           )
   | 19 -> ( 
-# 56 "lexer.mll"
+# 56 "lexer.fsl"
                      LESS 
 # 297 "lexer.fs"
           )
   | 20 -> ( 
-# 58 "lexer.mll"
+# 58 "lexer.fsl"
                      GREATER 
 # 302 "lexer.fs"
           )
   | 21 -> ( 
-# 60 "lexer.mll"
+# 60 "lexer.fsl"
                      IF 
 # 307 "lexer.fs"
           )
   | 22 -> ( 
-# 62 "lexer.mll"
+# 62 "lexer.fsl"
                      THEN 
 # 312 "lexer.fs"
           )
   | 23 -> ( 
-# 64 "lexer.mll"
+# 64 "lexer.fsl"
                      ELSE 
 # 317 "lexer.fs"
           )
   | 24 -> ( 
-# 66 "lexer.mll"
+# 66 "lexer.fsl"
                      LET 
 # 322 "lexer.fs"
           )
   | 25 -> ( 
-# 68 "lexer.mll"
+# 68 "lexer.fsl"
                      IN 
 # 327 "lexer.fs"
           )
   | 26 -> ( 
-# 70 "lexer.mll"
+# 70 "lexer.fsl"
                      REC 
 # 332 "lexer.fs"
           )
   | 27 -> ( 
-# 72 "lexer.mll"
+# 72 "lexer.fsl"
                      COMMA 
 # 337 "lexer.fs"
           )
   | 28 -> ( 
-# 74 "lexer.mll"
+# 74 "lexer.fsl"
                      IDENT(Id.gentmp Type.Unit) 
 # 342 "lexer.fs"
           )
   | 29 -> ( 
-# 76 "lexer.mll"
+# 76 "lexer.fsl"
                      ARRAY_CREATE 
 # 347 "lexer.fs"
           )
   | 30 -> ( 
-# 78 "lexer.mll"
+# 78 "lexer.fsl"
                      DOT 
 # 352 "lexer.fs"
           )
   | 31 -> ( 
-# 80 "lexer.mll"
+# 80 "lexer.fsl"
                      LESS_MINUS 
 # 357 "lexer.fs"
           )
   | 32 -> ( 
-# 82 "lexer.mll"
+# 82 "lexer.fsl"
                      SEMICOLON 
 # 362 "lexer.fs"
           )
   | 33 -> ( 
-# 84 "lexer.mll"
+# 84 "lexer.fsl"
                      EOF 
 # 367 "lexer.fs"
           )
   | 34 -> ( 
-# 86 "lexer.mll"
+# 86 "lexer.fsl"
                      IDENT(Lexing.lexeme lexbuf) 
 # 372 "lexer.fs"
           )
   | 35 -> ( 
-# 88 "lexer.mll"
+# 88 "lexer.fsl"
                      failwith
                	(Printf.sprintf "unknown token %s near characters %d-%d"
                	   (Lexing.lexeme lexbuf)
@@ -385,23 +385,23 @@ and _fslex_token  _fslex_state lexbuf =
 and _fslex_comment  _fslex_state lexbuf =
   match _fslex_tables.Interpret(_fslex_state,lexbuf) with
   | 0 -> ( 
-# 95 "lexer.mll"
+# 95 "lexer.fsl"
                      () 
 # 390 "lexer.fs"
           )
   | 1 -> ( 
-# 97 "lexer.mll"
+# 97 "lexer.fsl"
                      comment lexbuf;
                      comment lexbuf 
 # 396 "lexer.fs"
           )
   | 2 -> ( 
-# 100 "lexer.mll"
-                     Format.eprintf "warning: unterminated comment@." 
+# 100 "lexer.fsl"
+                     eprintf "warning: unterminated comment@." 
 # 401 "lexer.fs"
           )
   | 3 -> ( 
-# 102 "lexer.mll"
+# 102 "lexer.fsl"
                      comment lexbuf 
 # 406 "lexer.fs"
           )

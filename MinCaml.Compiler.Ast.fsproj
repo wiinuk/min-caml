@@ -57,7 +57,7 @@
   <ItemGroup>
     <Content Include="packages.config" />
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="ocaml.compatibility.fs" />
+    <Compile Include="Arg.fs" />
     <Compile Include="ocaml.compatibility.lexyacc.fs" />
     <Compile Include="ocaml.compatibility.system.fs" />
     <Compile Include="extensions.fs" />
@@ -77,7 +77,7 @@
       <OtherFlags>--light-off --unicode</OtherFlags>
     </FsLex>
     <Compile Include="lexer.fs">
-      <DependentUpon>lexer.mll</DependentUpon>
+      <DependentUpon>lexer.fsl</DependentUpon>
     </Compile>
     <Compile Include="typing.ml" />
     <Compile Include="kNormal.ml" />

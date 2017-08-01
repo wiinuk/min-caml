@@ -203,6 +203,10 @@
       <Link>sources\adder.ml</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Compile>
+    <Content Include="packages.config" />
+    <Content Include="App.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="..\dotnet\shell.fsx">
       <Link>shell.fsx</Link>
@@ -219,15 +223,11 @@
     <Compile Include="..\dotnet\Test.fs">
       <Link>Test.fs</Link>
     </Compile>
-    <None Include="palette.fsx" />
-    <Content Include="packages.config" />
     <Compile Include="Arg.Test.fs" />
     <Compile Include="..\dotnet\printer.fs">
       <Link>printer.fs</Link>
     </Compile>
-    <Content Include="App.config">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <None Include="palette.fsx" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="FSharp.Core, Version=4.3.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">

@@ -40,7 +40,7 @@ let rec g env = function (* 定数畳み込みルーチン本体 (caml2html: con
   | LetRec({ name = x; args = ys; body = e1 }, e2) ->
       LetRec({ name = x; args = ys; body = g env e1 }, g env e2)
   | LetTuple(xts, y, e) when memt y env ->
-      List.fold_left2
+      List.fold2
 	(fun e' xt z -> Let(xt, Var(z), e'))
 	(g env e)
 	xts
