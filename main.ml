@@ -34,14 +34,15 @@ let file f = (* ファイルをコンパイルしてファイルに出力する 
   
 // ここからコンパイラの実行が開始される (caml2html: main_entry)
 [<EntryPoint>]
-do
+let main args =
   let files = ref [] in
   Arg.parse
     [("-inline", Arg.Int(fun i -> Inline.threshold := i), "maximum size of functions inlined");
      ("-iter", Arg.Int(fun i -> limit := i), "maximum number of optimizations iterated")]
     (fun s -> files := !files @ [s])
     ("Mitou Min-Caml Compiler (C) Eijiro Sumii\n" ^
-     Printf.sprintf "usage: %s [-inline m] [-iter n] ...filenames without \".ml\"..." Sys.argv.(0));
+     sprintf "usage: %s [-inline m] [-iter n] ...filenames without \".ml\"..." args.[0]);
   List.iter
     (fun f -> ignore (file f))
-    !files
+    !files;
+  0
