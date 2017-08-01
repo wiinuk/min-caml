@@ -3,6 +3,7 @@
 #r "bin/debug/MinCaml.Compiler.Cli.dll"
 #r "bin/debug/MinCaml.Compiler.Test.dll"
 
+
 open MinCaml.Compiler.Test
 open System.IO
 

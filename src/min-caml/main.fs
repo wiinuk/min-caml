@@ -1,3 +1,5 @@
+module MinCaml
+
 open MinCaml.Compiler.Ast
 open MinCaml.Compiler.Cli
 open System.IO
