@@ -1,4 +1,6 @@
 module DynamicAssembly
+open MinCaml.Compiler.Ast
+open MinCaml.Compiler.Cli
 open AsmType
 open Asm
 open System

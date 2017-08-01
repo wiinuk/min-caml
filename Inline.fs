@@ -1,4 +1,4 @@
-module Inline
+module MinCaml.Compiler.Ast.Inline
 open KNormal
 
 (* インライン展開する関数の最大サイズ (caml2html: inline_threshold) *)

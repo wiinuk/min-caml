@@ -1,4 +1,4 @@
-module ConstFold
+module MinCaml.Compiler.Ast.ConstFold
 open KNormal
 open System.Collections.Generic
 

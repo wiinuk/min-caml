@@ -1,4 +1,5 @@
-module Emit
+module MinCaml.Compiler.Cli.Emit
+open MinCaml.Compiler.Ast
 open AsmType
 open Asm
 open System

@@ -1,3 +1,5 @@
+open MinCaml.Compiler.Ast
+open MinCaml.Compiler.Cli
 open System.IO
 open System.Text
 open Microsoft.FSharp.Text.Lexing

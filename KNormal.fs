@@ -1,5 +1,5 @@
 (* give names to intermediate values (K-normalization) *)
-module KNormal
+module MinCaml.Compiler.Ast.KNormal
 
 type t = (* K正規化後の式 (caml2html: knormal_t) *)
   | Unit

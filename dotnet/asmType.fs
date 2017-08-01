@@ -1,4 +1,5 @@
-module AsmType
+module MinCaml.Compiler.Cli.AsmType
+open MinCaml.Compiler.Ast
 
 type dotted_name = Id.t list
 type type_kind = Class | ValueType

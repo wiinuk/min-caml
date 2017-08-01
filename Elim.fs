@@ -1,4 +1,4 @@
-module Elim
+module MinCaml.Compiler.Ast.Elim
 open KNormal
 
 let rec effect = function (* 副作用の有無 (caml2html: elim_effect) *)

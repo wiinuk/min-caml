@@ -1,5 +1,4 @@
-﻿// TODO: namespace MinCaml.Compiler.Ast
-namespace global
+﻿namespace MinCaml.Compiler.Ast
 
 [<AutoOpen>]
 module ExtraTopLevelOperators =

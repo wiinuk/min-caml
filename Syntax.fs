@@ -1,4 +1,4 @@
-module Syntax
+module MinCaml.Compiler.Ast.Syntax
 
 type t = (* MinCamlの構文を表現するデータ型 (caml2html: syntax_t) *)
   | Unit

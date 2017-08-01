@@ -1,4 +1,6 @@
 namespace MinCaml.Compiler.Test
+open MinCaml.Compiler.Ast
+open MinCaml.Compiler.Cli
 
 module Printer =
     let wrapCore emptyIfNonWrap singleIfNonWrap first sep last xs = seq {

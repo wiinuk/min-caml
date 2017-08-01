@@ -1,5 +1,5 @@
 (* flatten let-bindings (just for prettier printing) *)
-module Assoc
+module MinCaml.Compiler.Ast.Assoc
 open KNormal
 
 let rec f = function (* ネストしたletの簡約 (caml2html: assoc_f) *)

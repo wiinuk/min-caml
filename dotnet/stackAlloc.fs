@@ -1,4 +1,5 @@
-module StackAlloc
+module MinCaml.Compiler.Cli.StackAlloc
+open MinCaml.Compiler.Ast
 open Tree
 
 let isOneOrZero k e =

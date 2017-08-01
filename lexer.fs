@@ -1,6 +1,6 @@
 # 1 "lexer.fsl"
  
-module Lexer
+module MinCaml.Compiler.Ast.Lexer
 // lexerが利用する変数、関数、型などの定義
 
 open Microsoft.FSharp.Text.Lexing

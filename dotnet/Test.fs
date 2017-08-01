@@ -1,4 +1,6 @@
 ﻿module Test
+open MinCaml.Compiler.Ast
+open MinCaml.Compiler.Cli
 open ExtraOperators
 open Xunit
 open System

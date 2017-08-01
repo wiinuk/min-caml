@@ -1,5 +1,7 @@
 module LibmincamlVirtual
 
+open MinCaml.Compiler.Ast
+open MinCaml.Compiler.Cli
 open AsmType
 open Asm
 

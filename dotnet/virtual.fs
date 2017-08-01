@@ -3,8 +3,8 @@
     "NameConventions", "TypeNamesMustBePascalCase")>]
 [<global.System.Diagnostics.CodeAnalysis.SuppressMessageAttribute(
     "NameConventions", "IdentifiersMustNotContainUnderscores")>]
-module Virtual
-
+module MinCaml.Compiler.Cli.Virtual
+open MinCaml.Compiler.Ast
 open AsmType
 open Asm
 module P = Tree

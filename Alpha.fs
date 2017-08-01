@@ -1,5 +1,5 @@
 (* rename identifiers to make them unique (alpha-conversion) *)
-module Alpha
+module MinCaml.Compiler.Ast.Alpha
 open KNormal
 open System.Collections.Generic
 

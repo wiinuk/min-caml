@@ -26,7 +26,8 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <WarningLevel>3</WarningLevel>
     <DocumentationFile>bin\Debug\MinCaml.Compiler.Ast.XML</DocumentationFile>
-    <OtherFlags>--mlcompatibility</OtherFlags>
+    <OtherFlags>
+    </OtherFlags>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -36,7 +37,8 @@
     <DefineConstants>TRACE</DefineConstants>
     <WarningLevel>3</WarningLevel>
     <DocumentationFile>bin\Release\MinCaml.Compiler.Ast.XML</DocumentationFile>
-    <OtherFlags>--mlcompatibility</OtherFlags>
+    <OtherFlags>
+    </OtherFlags>
   </PropertyGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
@@ -63,7 +65,7 @@
     <Compile Include="Id.fs" />
     <Compile Include="Syntax.fs" />
     <FsYacc Include="parser.fsy">
-      <OtherFlags>--module Parser</OtherFlags>
+      <OtherFlags>--module MinCaml.Compiler.Ast.Parser</OtherFlags>
     </FsYacc>
     <Compile Include="parser.fsi">
       <DependentUpon>parser.fsy</DependentUpon>

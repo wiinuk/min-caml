@@ -2,7 +2,8 @@
     "NameConventions", "TypeNamesMustBePascalCase")>]
 [<global.System.Diagnostics.CodeAnalysis.SuppressMessageAttribute(
     "NameConventions", "IdentifiersMustNotContainUnderscores")>]
-module Asm
+module MinCaml.Compiler.Cli.Asm
+open MinCaml.Compiler.Ast
 open AsmType
 
 type call_conv = Instance | Static

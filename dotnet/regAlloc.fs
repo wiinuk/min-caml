@@ -1,4 +1,4 @@
-module RegAlloc
+module MinCaml.Compiler.Cli.RegAlloc
 
 open Asm
 //

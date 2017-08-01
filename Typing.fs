@@ -1,5 +1,5 @@
 (* type inference/reconstruction *)
-module Typing
+module MinCaml.Compiler.Ast.Typing
 open Syntax
 
 exception Unify of Type.t * Type.t

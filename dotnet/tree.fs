@@ -4,7 +4,8 @@
     "NameConventions", "IdentifiersMustNotContainUnderscores")>]
 
 /// SSA 形式から、スタック形式の CIL コードに変換しやすい式木への変換
-module Tree
+module MinCaml.Compiler.Cli.Tree
+open MinCaml.Compiler.Ast
 
 module P = Closure
 

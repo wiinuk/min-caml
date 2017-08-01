@@ -1,4 +1,4 @@
-module Beta
+module MinCaml.Compiler.Ast.Beta
 open KNormal
 open System.Collections.Generic
 
