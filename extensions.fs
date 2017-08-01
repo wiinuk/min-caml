@@ -8,3 +8,7 @@ module Map =
 
 module Set =
     let ofList l = List.fold (fun s e -> Set.add e s) Set.empty l
+
+[<AutoOpen>]
+module ExtraTopLevelOperators =
+    let unreachable<'a> = failwith<'a> "unreachable"

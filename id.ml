@@ -19,7 +19,7 @@ let rec id_of_typ = function
   | Type.Fun _ -> "f"
   | Type.Tuple _ -> "t"
   | Type.Array _ -> "a"
-  | Type.Var _ -> assert_false()
+  | Type.Var _ -> unreachable
 
 let gentmp typ =
   incr counter;

@@ -422,7 +422,7 @@ let _fsyacc_reductions ()  =    [|
                    (
 # 83 "parser.mly"
                            match _2 with
-                         | Float(f) -> Float(-.f) (* -1.23などは型エラーではないので別扱い *)
+                         | Float(f) -> Float(-f) (* -1.23などは型エラーではないので別扱い *)
                          | e -> Neg(e) 
                    )
 # 83 "parser.mly"

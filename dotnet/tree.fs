@@ -140,7 +140,7 @@ let addVars xts env = List.fold (fun env (x, t) -> Map.add x t env) env xts
 
 let private arrayElementType = function
     | Type.Array t -> t
-    | _ -> assert_false()
+    | _ -> failwith "expected: array type"
 
 let notConditionalTypeIfThrow = function
     | Type.Bool
@@ -180,7 +180,7 @@ let rec expr env = function
                 // Closure.g で付いた "min_caml_" を除去
                 let prefix = "min_caml_"
                 if x.StartsWith prefix then Map.find x.[prefix.Length..] !Typing.extenv
-                else assert_false()
+                else failwithf "expected: prefix \"min_caml_\""
 
         AppDir((x', t), List.map Var xs)
 

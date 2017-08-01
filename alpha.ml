@@ -1,8 +1,9 @@
 (* rename identifiers to make them unique (alpha-conversion) *)
 
 open KNormal
+open System.Collections.Generic
 
-let find x env = try Map.find x env with Not_found -> x
+let find x env = try Map.find x env with :? KeyNotFoundException -> x
 
 let rec g env = function (* α変換ルーチン本体 (caml2html: alpha_g) *)
   | Unit -> Unit

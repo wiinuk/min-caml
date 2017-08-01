@@ -126,7 +126,7 @@ let rec g env = function (* K正規化ルーチン本体 (caml2html: knormal_g) 
 		insert_let (g env e2)
 		  (fun x -> bind (xs @ [x]) e2s) in
 	  bind [] e2s (* left-to-right evaluation *)
-      | _ -> assert_false())
+      | _ -> unreachable)
   | Syntax.App(e1, e2s) ->
       (match g env e1 with
       | _, Type.Fun(_, t) as g_e1 ->
@@ -138,7 +138,7 @@ let rec g env = function (* K正規化ルーチン本体 (caml2html: knormal_g) 
 		    insert_let (g env e2)
 		      (fun x -> bind (xs @ [x]) e2s) in
 	      bind [] e2s) (* left-to-right evaluation *)
-      | _ -> assert_false())
+      | _ -> unreachable)
   | Syntax.Tuple(es) ->
       let rec bind xs ts = function (* "xs" and "ts" are identifiers and types for the elements *)
 	| [] -> Tuple(xs), Type.Tuple(ts)
@@ -169,7 +169,7 @@ let rec g env = function (* K正規化ルーチン本体 (caml2html: knormal_g) 
 	  insert_let g_e1
 	    (fun x -> insert_let (g env e2)
 		(fun y -> Get(x, y), t))
-      | _ -> assert_false())
+      | _ -> unreachable)
   | Syntax.Put(e1, e2, e3) ->
       insert_let (g env e1)
 	(fun x -> insert_let (g env e2)

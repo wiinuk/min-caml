@@ -1,25 +1,6 @@
 ﻿namespace global
 
 [<AutoOpen>]
-module Core =
-    exception Assert_failure of string * int * int
-    exception Invalid_argument = System.ArgumentException
-    exception Not_found = System.Collections.Generic.KeyNotFoundException
-    let inline (~-.) x = (~-) x
-    let inline (+.) l r = l + r
-    let inline (-.) l r = l - r
-    let inline ( *. ) l r = l * r
-    let inline (/.) l r = l / r
-
-[<AutoOpen>]
-module LanguagePrimitives =
-    open System.Diagnostics
-
-    let assert_false() =
-        let f = StackFrame(1, true)
-        raise <| Assert_failure(f.GetFileName(), f.GetFileLineNumber(), f.GetFileColumnNumber())
-
-[<AutoOpen>]
 module Pervasives =
     open System.Text
     open System.IO

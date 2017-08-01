@@ -107,11 +107,11 @@ let inline private (+>) x f = f x
 
 let private getArrayElement = function
     | Type.Array t -> t
-    | _ -> assert_false()
+    | _ -> failwith "expected: array type"
 
 let private getFunctionElements = function
     | Type.Fun(ts, r) -> ts, r
-    | _ -> assert_false()
+    | _ -> failwith "expected: function type"
 
 // デリゲートをキャッシュして使いまわす
 // NOTE: デリゲートをキャッシュする操作はスレッドセーフでないが、二重にインスタンスが生成されるぐらいで特に問題ないはず
